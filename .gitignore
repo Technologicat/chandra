@@ -1,0 +1,24 @@
+# Sample workflow images — scratch/staging dump (~28 MB).
+# A curated subset will be promoted into tests/fixtures/ instead.
+00_stuff/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# PDM
+.pdm-python
+.pdm-build/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
