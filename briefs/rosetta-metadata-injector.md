@@ -300,8 +300,10 @@ Decided: the analyzer/injector is **`rosetta`** — Rosetta Stone: one message, 
 mutually legible; the tool makes the workflow legible to outside tools (surface meaning holds, the
 layered reference rewards the curious). Package name `imagegen-metadata-tools` stays.
 
-The prompt-search tool is renamed into the same archaeology/decipherment register. Leading
-candidate **`concordance`** — the scholarly term for an indexed listing of every occurrence of
-words in a corpus with their locations, which is exactly what searching prompts across a directory
-of images produces (literary/biblical-concordance lineage for the curious). Shorter alternatives if
-typing it grates: `scribe` or `sift`. Final call is the user's.
+The prompt-search tool is renamed into the same archaeology/decipherment register: **`concordance`**
+— the scholarly term for an indexed listing of every occurrence of words in a corpus with their
+locations, which is exactly what searching prompts across a directory of images produces
+(literary/biblical-concordance lineage for the curious). `scribe` was considered and rejected: a
+scribe *writes*, so the name would suggest at first glance a tool that writes into the files,
+whereas this tool is read-only by design (its report goes to stdout, never into the images).
+`concordance` is neutral and accurate.
