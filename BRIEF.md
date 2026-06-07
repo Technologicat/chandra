@@ -171,12 +171,18 @@ Resolution:
 
 1. **Literal** → use it.
 2. **Link to a Primitive role** (`PrimitiveInt`/`PrimitiveFloat`/…) → read `value`.
-3. **Link to an `Evaluate Integers`/`Evaluate Floats` role** → it carries
-   `python_expression` (e.g. `'a * b'`) over operands `a`/`b`/`c` that are themselves
-   literals-or-links. Resolve operands recursively, then evaluate the expression in a **sandboxed
-   arithmetic evaluator** (Python `ast`, numeric/operator nodes only — no names, calls, or
-   attributes).
-4. **Otherwise** → unresolved → field reported absent (honest fallback).
+3. **Link to an `Evaluate Integers`/`Evaluate Floats` role** → it carries a free-form
+   `python_expression` (e.g. `'a * b'`, but also `int()`, `ceil()`, `min`/`max`) over operands
+   `a`/`b`/`c` that are themselves literals-or-links. Resolve operands recursively to plain
+   numbers, then evaluate via **[`simpleeval`](https://github.com/danthedeckie/simpleeval)** with
+   `names={'a':…,'b':…,'c':…}` plus a small whitelisted math-function set. `simpleeval` is the
+   right tool here — it is purpose-built for evaluating an untrusted expression with injected
+   variables, hardened against the obvious attacks, and supports the function calls these nodes
+   actually use (a bare arithmetic AST-walk would reject them, and reimplementing its whitelist
+   would just be reimplementing `simpleeval`). The expression text comes from a parsed PNG, i.e.
+   untrusted input — `simpleeval`'s sandbox is the point.
+4. **Otherwise** (including any expression `simpleeval` refuses) → unresolved → field reported
+   absent (honest fallback).
 
 Recursion is depth-bounded with cycle detection (graphs are DAGs, but a malformed file shouldn't
 hang us).
@@ -196,10 +202,14 @@ Decision: **name + settings always; hashing is opt-in.**
   - Graceful fallback: a file we can't locate → that resource stays name-only; we warn, we don't
     fail.
 
-> **Verification owed:** the exact AutoV2 spec (which hash, how many hex chars, model vs. LoRA
-> field) is to be confirmed against CivitAI before we ship hashing. Stated belief: AutoV2 = first N
-> hex chars of the file's SHA-256. Confirm N and the `Lora hashes`/`Hashes` field formats with a
-> live upload.
+> **Verification owed:** confirm the exact AutoV2 spec before shipping hashing, from two sources:
+> (1) **AUTOMATIC1111 webui** `modules/hashes.py` (the `sha256` + short-hash logic) and the LoRA
+> extra-networks code that writes `Lora hashes:` — the canonical algorithm Forge and CivitAI track;
+> (2) **CivitAI's API as ground truth** — hash a model we own that's on CivitAI, call
+> `GET /api/v1/model-versions/by-hash/{hash}`, and read the `files[].hashes` object (`AutoV2`,
+> `SHA256`). If our computed hash round-trips to the right model page, the spec is confirmed — a
+> stronger check than any doc. Stated belief to verify: `Model hash`/AutoV2 = `sha256(file)[:10]`,
+> `Lora hashes` shorthash = `sha256(file)[:12]`.
 
 ## CLI design
 
@@ -207,8 +217,8 @@ Decision: **name + settings always; hashing is opt-in.**
   surgery (below); the original image bytes and existing chunks are preserved verbatim.
 - Batch-first: accept files and/or directories (recurse), mirroring the existing
   `metadata-matching-dirs.py` ergonomics for sessions of hundreds of images.
-- Idempotent: re-running on an already-injected image replaces the `parameters` chunk, doesn't
-  stack duplicates.
+- Idempotent: re-running on an already-injected image replaces the existing `parameters` chunk in
+  place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
 - Flags (initial): `--hash` (+ `--models-dir`), `--dry-run` (print the synthesized string, write
   nothing), `--force`/skip-if-present policy, verbosity. A `--print`/inspect mode that dumps the
   parsed `Recipe` aids debugging and doubles as the analysis entry point.
@@ -217,12 +227,24 @@ Decision: **name + settings always; hashing is opt-in.**
 
 We do **not** re-encode via Pillow (that recompresses IDAT and drops/rewrites text chunks).
 Instead we operate at the chunk level — the approach already proven in `metadata-matching-dirs.py`:
-read the chunk stream, and splice a new `tEXt` chunk (keyword `parameters`) immediately before
-`IEND`, recomputing its CRC. Image data and the `prompt`/`workflow` chunks are byte-for-byte
-untouched. On re-injection, replace an existing `parameters` chunk in place.
+read the chunk stream, splice in our `parameters` chunk immediately before `IEND`, and recompute
+its CRC. Image data and the `prompt`/`workflow` chunks stay byte-for-byte untouched.
+
+**tEXt vs iTXt.** `tEXt` is Latin-1 only; `iTXt` is UTF-8. Prompts can contain non-Latin-1
+characters (CJK, emoji, typographic quotes) — which is exactly why `metadata-matching-dirs.py`
+already scans both chunk types (newer Forge emits `iTXt` for such content). So the rule (matching
+PIL/Forge behavior): **write `tEXt` when the `parameters` string is Latin-1-encodable, otherwise
+write `iTXt` (UTF-8)**. SD Prompt Reader reads both transparently via PIL's `info` dict; CivitAI's
+`iTXt` handling is a verification item. Most of the current samples are Latin-1, so `tEXt` is the
+common path, but the fallback is implemented from the start.
+
+**Idempotent replacement.** Before writing, scan for an existing `parameters` chunk in *either*
+`tEXt` *or* `iTXt` form (a previously-injected image, or one from a Forge/Comfy save-metadata
+node, could carry either) and remove it. Exactly one `parameters` chunk is ever present
+afterward — we never stack a second.
 
 (The `workflow` chunk, which the user annotates with Markdown comments documenting model/quant
-choices, is thereby preserved — those comments survive injection.)
+choices, is preserved — those comments survive injection.)
 
 ## Verification plan
 
@@ -242,6 +264,11 @@ choices, is thereby preserved — those comments survive injection.)
 - Unit tests on `Recipe` extraction per fixture (the invariant: this graph → these fields),
   the scalar resolver (literal/primitive/evaluate/unresolved), and chunk surgery (insert, replace,
   idempotency, `pngcheck` clean).
+- Injection tests are destructive, so each operates on a fresh copy. pytest's
+  `tmp_path`/`tmp_path_factory` fixtures hand every test a clean dir under the system temp — which
+  on these machines *is* the `/tmp` ramdisk — so "copy fixture → mutate → assert → auto-cleaned"
+  is the built-in pattern; no manual ramdisk handling. Assert tEXt vs iTXt selection (Latin-1 vs
+  non-Latin-1 content) and replace-either-form idempotency explicitly.
 - Integration test through SD Prompt Reader's parser as in *Verification plan* step 1.
 
 ## Non-goals (v1)
@@ -250,25 +277,31 @@ choices, is thereby preserved — those comments survive injection.)
   already have `parameters`).
 - No JPEG/WEBP output (PNG-first; the EXIF path exists in SD Prompt Reader if needed later).
 - No editing/round-tripping of the ComfyUI graph itself — we only *read* it and *add* a chunk.
-- No attempt to faithfully evaluate arbitrary `Evaluate*` Python expressions beyond sandboxed
-  arithmetic; exotic expressions resolve to "absent".
+- No attempt to evaluate `Evaluate*` expressions beyond what `simpleeval` safely supports;
+  anything it refuses resolves to "absent".
 
 ## Project shape
 
-Pure-Python PDM project (per the fleet's standard setup). The existing `metadata-matching-dirs.py`
-becomes one tool in the package; the new injector is the second. Shared PNG-chunk code is factored
-into a common module. Lint/style/CI per the fleet conventions.
+Pure-Python PDM project (per the fleet's standard setup). Two CLI tools share a package:
 
-## Bikeshed: name
+- **`rosetta`** — the new analyzer/injector (this brief's subject).
+- **`concordance`** — the existing prompt-search tool (`metadata-matching-dirs.py`), renamed into
+  the scheme and given an optional directory argument (one or more roots) instead of hardcoding the
+  current directory.
 
-The tool reconstructs the generation recipe from the graph and re-expresses it in a script both
-external readers understand — same content, different writing system. Candidates:
+Shared PNG-chunk code (the `tEXt`/`iTXt` read/pack/CRC machinery) is factored into a common
+module both tools import. Runtime dependency of note: `simpleeval` (scalar resolver). The
+distribution ships both tools and the README; as an app, it commits its lockfile. Lint/style/CI
+per the fleet conventions.
 
-- **`rosetta`** — Rosetta Stone: one message, multiple scripts, mutually legible. Surface meaning
-  holds (it makes the workflow legible to outside tools), layered reference rewards the curious.
-- **`civitize`** — verb, "make CivitAI-readable." Clear, but brand-tethered and narrower than what
-  it does (it also serves SD Prompt Reader / any A1111 reader).
-- plain **`comfy2a1111`** — does what it says; no charm.
+## Naming
 
-Leaning `rosetta` for the analyzer/injector command; package name `imagegen-metadata-tools` stays.
-Final call is the user's.
+Decided: the analyzer/injector is **`rosetta`** — Rosetta Stone: one message, multiple scripts,
+mutually legible; the tool makes the workflow legible to outside tools (surface meaning holds, the
+layered reference rewards the curious). Package name `imagegen-metadata-tools` stays.
+
+The prompt-search tool is renamed into the same archaeology/decipherment register. Leading
+candidate **`concordance`** — the scholarly term for an indexed listing of every occurrence of
+words in a corpus with their locations, which is exactly what searching prompts across a directory
+of images produces (literary/biblical-concordance lineage for the curious). Shorter alternatives if
+typing it grates: `scribe` or `sift`. Final call is the user's.
