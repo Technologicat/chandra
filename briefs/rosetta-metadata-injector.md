@@ -245,20 +245,21 @@ Decision: **name + settings always; hashing is opt-in.**
 
 ## CLI design
 
-- **Read-only by default; writing is opt-in via `--inject`.** `igmt rosetta <png...>` analyzes and
-  prints (the synthesized `parameters` string, or the parsed `Recipe`), writing nothing. Injection
-  happens *only* with an explicit `--inject`. Destructive-by-default would be unsafe here — the tool
-  is batch-first over directories of hundreds of images, and a stray `igmt rosetta .` must never
-  rewrite every PNG. The default thus also *is* the inspect mode (no separate `--print` needed).
-- **`--inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
-  original image bytes and existing chunks are preserved verbatim — so once you've opted in, an
-  in-place rewrite is safe and a backup is just clutter.
-- Batch-first: accept files and/or directories (recurse), mirroring the existing
+- **Two verbs, a read/write split.** `igmt show <png...>` analyzes and prints (the synthesized
+  `parameters` string, or the parsed `Recipe` with `--recipe`), writing nothing. `igmt inject
+  <png...>` writes the `parameters` chunk in place. Writing is its *own command*, never a side effect
+  of the read path — so a stray `igmt show .` can't mutate anything, and you opt into writing by
+  *typing* `inject`. (This replaced an earlier `rosetta [--inject]` flag model; the split makes the
+  destructive action even more explicit. The engine module is still named `rosetta`.)
+- **`inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
+  original image bytes and existing chunks are preserved verbatim — so an in-place rewrite is safe
+  and a backup is just clutter.
+- Batch-first: both verbs accept files and/or directories (recurse), mirroring the existing
   `metadata-matching-dirs.py` ergonomics for sessions of hundreds of images.
-- Idempotent: re-running `--inject` on an already-injected image replaces the existing `parameters`
+- Idempotent: re-running `inject` on an already-injected image replaces the existing `parameters`
   chunk in place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
-- Other flags: `--hash` (+ `--models-dir`) for resource hashing; a skip-if-present / `--force`
-  policy; verbosity.
+- Other flags: `--hash` (+ `--models-dir`) for resource hashing (on both verbs — `show` previews
+  what `inject` would write); a skip-if-present / `--force` policy; verbosity.
 
 ## PNG chunk surgery (lossless injection)
 
@@ -287,14 +288,26 @@ keeps in the `workflow` (documenting model/quant choices) are preserved.
 
 ## Verification plan
 
-1. **Round-trip through SD Prompt Reader** (it's installed at `~/stable-diffusion-prompt-reader/`):
-   feed each injected sample through its `ImageDataReader`, assert tool = "ComfyUI (A1111
-   compatible)" and that positive/negative/settings match the `Recipe`. This is automatable in the
-   test suite against the parser directly.
-2. **Live CivitAI upload** of a representative injected image per family/mode; confirm prompt,
-   settings, and (with `--hash`) resource links are detected. Manual, but the acceptance gate.
-3. **PNG integrity:** `pngcheck` (installed) on every output; assert no warnings and that
-   `prompt`/`workflow`/IDAT are unchanged.
+1. **A1111 format contract (in-suite, always runs).** `tests/test_synthesize.py` re-parses our
+   output with `a1111_parse`, a faithful encoding of the A1111 `parameters` format that SD Prompt
+   Reader (`format/a1111.py`) and CivitAI both consume — if our string parses under those rules,
+   they read it. We do *not* add `sd-prompt-reader` as a dev dep: it's a desktop app that drags the
+   whole GUI stack (customtkinter, tkinterdnd2, …), disproportionate for a ~15-line parser, and there
+   is no single authoritative version to pin (installed copies drift; PyPI is at 1.3.5).
+2. **Real SD Prompt Reader (optional / occasional).** Only the parser is needed — install it headless
+   without the GUI stack:
+
+       python -m pip install --no-deps sd-prompt-reader pillow piexif
+
+   `test_real_sdpr_reads_injected` then feeds an injected sample through the *current* `ImageDataReader`
+   and asserts `tool == "ComfyUI\n(A1111 compatible)"`, `READ_SUCCESS`, and matching prompts (it
+   self-skips when the parser isn't importable). Confirmed green against PyPI 1.3.5 (2026-06-08).
+3. **Live CivitAI upload** of a representative injected image per family/mode; confirm prompt,
+   settings, and (with `--hash`) resource links are detected. Manual, but the ultimate acceptance
+   gate — current CivitAI is confirmed to fail on the user's un-injected ComfyUI uploads, which is
+   the whole motivation.
+4. **PNG integrity:** `pngcheck` on every output; assert no warnings and that `prompt`/`workflow`/IDAT
+   are unchanged (covered by the chunk-surgery tests).
 
 ## Tests & fixtures
 
@@ -346,23 +359,25 @@ Pure-Python PDM project (per the fleet's standard setup); developed on Python 3.
 `requires-python >= 3.11`. It's an app (CLI), so it **commits `pdm.lock`**.
 
 **One dispatcher entry point: `igmt`.** A single console script with argparse subparsers routes to
-the subtools — `igmt rosetta ...`, `igmt concordance ...`. One PATH entry no matter how many tools
-we add; `igmt --help` lists the toolbox; the evocative names survive as subcommands; no collision
-with any stray `rosetta` on the user's system. Each subtool module registers its own subparser
-(`add_subparser`) and a `run(args)` handler; the dispatcher wires them up and routes to `args.func`.
-Tools are unit-tested by driving the dispatcher: `cli.main(["rosetta", ...])`. (Distribution name
-stays `imagegen-metadata-tools`; the *import* package is the short `igmt`, matching the command —
-the Pillow→`PIL` pattern.)
+three descriptive verbs — `igmt search`, `igmt show`, `igmt inject`. One PATH entry no matter how
+many subcommands we add; `igmt --help` lists them; verbs are self-documenting (descriptive beats
+evocative as subcommands — `git commit`, not `git rosetta`). The engine modules keep their layered
+names — `rosetta` powers `show`/`inject`, `concordance` powers `search` (lineage in the README).
+Each module registers its subparser(s) via `add_subparser` and sets an `args.func`; the dispatcher
+routes. Tools are unit-tested by driving the dispatcher: `cli.main(["show", ...])`. (Distribution
+name stays `imagegen-metadata-tools`; the *import* package is the short `igmt`, matching the
+command — the Pillow→`PIL` pattern. The `igmt` command name itself is a placeholder pending a
+pre-publish rename — see `TODO_DEFERRED.md`.)
 
-- **`rosetta`** — the analyzer/injector (this brief's subject).
-- **`concordance`** — the prompt-search tool (currently `metadata-matching-dirs.py`), renamed,
-  given an optional directory argument, and extended with fragment/exact search modes. See
+- **`rosetta`** (engine for `show` / `inject`) — the analyzer/injector (this brief's subject).
+- **`concordance`** (engine for `search`) — the prompt-search tool (currently
+  `metadata-matching-dirs.py`), gaining a directory argument and fragment/exact search modes. See
   `briefs/concordance-search.md`.
 
 **Tab completion via `argcomplete`.** The `igmt` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
 calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live
-parser (no static script to drift): `igmt <tab>` offers `rosetta`/`concordance` (and any future
-subtool automatically), `igmt rosetta --<tab>` lists its flags. A custom completer restricts file
+parser (no static script to drift): `igmt <tab>` offers `search`/`show`/`inject` (and any future
+subcommand automatically), `igmt show --<tab>` lists its flags. A custom completer restricts file
 arguments to `*.png`. Users enable it once — globally (`activate-global-python-argcomplete`) or
 per-command (`eval "$(register-python-argcomplete igmt)"` in their shell rc); bash and zsh.
 Documented in the README.
@@ -377,10 +392,14 @@ distribution ships both tools and the README. Lint/style/CI per the fleet conven
 
 ## Naming
 
-Both names are decided: the analyzer/injector is **`rosetta`**, the prompt-search tool is
-**`concordance`** (its own brief: `briefs/concordance-search.md`). Package name
-`imagegen-metadata-tools` stays. The full human-facing rationale — the Rosetta Stone, the deadpan
+The CLI surface is three descriptive verbs: **`igmt search`**, **`igmt show`**, **`igmt inject`**
+(descriptive beats evocative for subcommands). The layered names live on as the *engine* modules:
+**`rosetta`** (behind `show`/`inject`) and **`concordance`** (behind `search`, its own brief:
+`briefs/concordance-search.md`). The full human-facing rationale — the Rosetta Stone, the deadpan
 "no relation to Apple's Rosetta", and what a concordance is — lives in the project `README.md`,
 where a reader will look for it. In short: `rosetta` makes a workflow legible to outside tools (one
 message, many scripts); `concordance` indexes and searches the text inscribed across a corpus of
-images, and is read-only by design (hence *not* `scribe`, which would imply writing into the files).
+images, and is read-only by design (hence *not* `scribe`).
+
+The toolkit/command name `igmt` (the project's initials) is a placeholder pending a pre-publish
+evocative rename (see `TODO_DEFERRED.md`). Distribution name `imagegen-metadata-tools` stays.

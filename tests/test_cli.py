@@ -10,8 +10,9 @@ def test_help_lists_subcommands(capsys):
         cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "rosetta" in out
-    assert "concordance" in out
+    assert "search" in out
+    assert "show" in out
+    assert "inject" in out
 
 
 def test_version_action(capsys):
@@ -21,13 +22,17 @@ def test_version_action(capsys):
     assert "igmt" in capsys.readouterr().out
 
 
-def test_rosetta_no_paths_is_usage_error():
-    # rosetta requires at least one PNG path; with none it reports a usage error.
-    assert cli.main(["rosetta"]) == 2
+def test_show_no_paths_is_usage_error():
+    # `show`/`inject` require at least one PNG path; with none they report a usage error.
+    assert cli.main(["show"]) == 2
 
 
-def test_dispatch_concordance_stub():
-    assert cli.main(["concordance"]) == 0
+def test_inject_no_paths_is_usage_error():
+    assert cli.main(["inject"]) == 2
+
+
+def test_dispatch_search_stub():
+    assert cli.main(["search"]) == 0
 
 
 def test_no_command_errors():

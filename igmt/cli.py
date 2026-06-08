@@ -4,13 +4,15 @@
 
 Routes subcommands to the individual tools:
 
-    igmt rosetta ...       inject A1111/CivitAI metadata from a ComfyUI workflow
-    igmt concordance ...   search prompts across a directory of images
+    igmt search ...   search prompts across a directory of images
+    igmt show ...     print the A1111/CivitAI metadata for a ComfyUI image (read-only)
+    igmt inject ...   write that metadata into the image(s)
 
-Each subtool module registers its own subparser (``add_subparser``) and a ``run(args)`` handler,
-so the dispatcher only has to wire them up and route to ``args.func``. Tab completion is provided by
-argcomplete when it is installed; it derives the completion set from the live parser, so new
-subtools appear in completion automatically.
+Each subtool module registers its subparser(s) (``add_subparser``) and sets an ``args.func`` handler,
+so the dispatcher only has to wire them up and route. (The modules keep the names ``rosetta`` —
+``show``/``inject`` — and ``concordance`` — ``search``; see the README for the lineage.) Tab
+completion is provided by argcomplete when installed; it derives the completion set from the live
+parser, so new subcommands appear in completion automatically.
 """
 
 import argparse
@@ -26,8 +28,8 @@ from . import concordance, rosetta
 
 __all__ = ["build_parser", "main"]
 
-# Subtool modules, in the order they should appear in `igmt --help`.
-_SUBTOOLS = (rosetta, concordance)
+# Subtool modules; subcommands appear in `igmt --help` in this order (search, show, inject).
+_SUBTOOLS = (concordance, rosetta)
 
 
 def build_parser() -> argparse.ArgumentParser:

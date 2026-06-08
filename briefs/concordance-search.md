@@ -1,7 +1,9 @@
 # Brief: `concordance` — prompt search across image corpora
 
 *Companion to `rosetta` (see `briefs/rosetta-metadata-injector.md`). This is the existing
-`metadata-matching-dirs.py` tool, renamed into the scheme and extended.*
+`metadata-matching-dirs.py` tool, folded into the toolkit and extended. `concordance` is the engine
+module name; the CLI verb is **`igmt search`** (descriptive verbs on the surface, layered names in
+the source — see the README).*
 
 ## Purpose
 
@@ -69,10 +71,10 @@ and matches text only. Drop the stale comment during the rename.
 
 ## Naming
 
-`concordance` — the scholarly term for an indexed listing of every occurrence of words in a corpus
-with their locations, which is exactly what this produces. Read-only by design (its report goes to
-stdout, never into the files) — which is why *not* `scribe`. Full rationale in the project
-`README.md`.
+CLI verb: **`igmt search`** (self-documenting). Engine module: **`concordance`** — the scholarly
+term for an indexed listing of every occurrence of words in a corpus with their locations, which is
+exactly what this produces. Read-only by design (its report goes to stdout, never into the files) —
+which is why *not* `scribe`. Full rationale in the project `README.md`.
 
 ## Non-goals
 

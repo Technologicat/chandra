@@ -2,36 +2,51 @@
 
 Tools for working with the metadata that image generators embed in their output.
 
-Two command-line tools share this package:
+Everything is one command, **`igmt`**, with three subcommands:
 
-- **`rosetta`** — reads the ComfyUI workflow embedded in a PNG, reconstructs the generation recipe
-  by walking the node graph, and injects [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/SD-Forge-compatible
-  metadata so the image is recognized by services that don't analyze ComfyUI graphs themselves —
-  notably [CivitAI](https://civitai.com) on upload and
-  [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader) for offline
-  inspection. *(In design — see [briefs/rosetta-metadata-injector.md](briefs/rosetta-metadata-injector.md).)*
+| Command | What it does |
+|---|---|
+| `igmt show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/SD-Forge metadata it *would* write. Read-only. |
+| `igmt inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services that don't analyze ComfyUI graphs — notably [CivitAI](https://civitai.com) on upload and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader). |
+| `igmt search <terms…>` | Search the prompts embedded across a directory tree of generated images. |
 
-- **`concordance`** — searches the prompts embedded across a directory tree of generated images, so
-  you can find which images from a session match a given description. *(Currently the script
-  [`metadata-matching-dirs.py`](metadata-matching-dirs.py); rename and extensions per
-  [briefs/concordance-search.md](briefs/concordance-search.md).)*
+Reading and writing are deliberately separate commands: `show` never modifies anything, and writing
+only happens when you explicitly ask for `inject`.
+
+```bash
+igmt show image.png                 # preview the synthesized metadata
+igmt inject *.png                   # write metadata into a batch, in place
+igmt search starfleet captain       # find images whose prompt mentions a starfleet captain
+```
+
+Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
+a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and
+non-standard loaders are not. `igmt` walks the embedded ComfyUI graph itself, reconstructs the
+recipe, and re-expresses it in the one format those tools read robustly.
 
 ## On the names
 
-**`rosetta`** — after the [Rosetta Stone](https://en.wikipedia.org/wiki/Rosetta_Stone), which
-carries one message in several scripts so that readers of any one of them can understand it. This
-tool does the same for a generation recipe: it takes the content ComfyUI wrote in its own dialect
-and re-expresses it in the dialect CivitAI and SD Prompt Reader read fluently. (No relation to
-Apple's Rosetta.)
+The command, `igmt`, is just the project's initials — short to type. The interesting names belong to
+the two engines under the hood (you'll meet them in the source and the design briefs):
 
-**`concordance`** — a [concordance](https://en.wikipedia.org/wiki/Concordance_(publishing)) is an
-alphabetical index of the words in a text or corpus together with where each one occurs; biblical
-and Shakespearean concordances are the classic examples. Searching the prompts across a folder of
-images is the same operation over a corpus of pictures. The tool is read-only by design — its report
-goes to your terminal, never into the files — which is why it isn't called `scribe`.
+- **`rosetta`** powers `show` and `inject`. Named for the
+  [Rosetta Stone](https://en.wikipedia.org/wiki/Rosetta_Stone), which carries one message in several
+  scripts so a reader of any one of them can understand it. This engine does the same for a
+  generation recipe: it takes what ComfyUI wrote in its own dialect and re-expresses it in the
+  dialect CivitAI and SD Prompt Reader read fluently. (No relation to Apple's Rosetta.)
+
+- **`concordance`** powers `search`. A
+  [concordance](https://en.wikipedia.org/wiki/Concordance_(publishing)) is an alphabetical index of
+  the words in a text or corpus together with where each one occurs — biblical and Shakespearean
+  concordances are the classic examples. Searching the prompts across a folder of images is the same
+  operation over a corpus of pictures. It only reads — its report goes to your terminal, never into
+  the files — which is why it isn't called `scribe`.
+
+The CLI shows you plain verbs; the lineage is there for whoever goes looking.
 
 ## Status
 
-The design briefs live under [`briefs/`](briefs/). `concordance` exists today as
-`metadata-matching-dirs.py`; `rosetta` is being built. This README will grow into usage docs as the
-tools land.
+The design briefs live under [`briefs/`](briefs/). `show`/`inject` are implemented through the
+analyze → synthesize → inject pipeline; `search` currently exists as the standalone script
+[`metadata-matching-dirs.py`](metadata-matching-dirs.py) and is being folded in. This README will
+grow into full usage docs as the tools land.

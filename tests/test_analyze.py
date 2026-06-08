@@ -84,16 +84,20 @@ def test_trace_conditioning_through_reference_latent():
 
 
 def test_walk_model_collects_lora_chain():
+    # Three chained LoRAs -> base loader: the walk handles arbitrary depth, in order.
     graph = {
         "l1": {"class_type": "LoraLoaderModelOnly",
                "inputs": {"lora_name": "accel.safetensors", "strength_model": 1.0, "model": ["l2", 0]}},
         "l2": {"class_type": "LoraLoaderModelOnly",
-               "inputs": {"lora_name": "style.safetensors", "strength_model": 0.8, "model": ["base", 0]}},
+               "inputs": {"lora_name": "style.safetensors", "strength_model": 0.8, "model": ["l3", 0]}},
+        "l3": {"class_type": "LoraLoaderModelOnly",
+               "inputs": {"lora_name": "detail.safetensors", "strength_model": 0.5, "model": ["base", 0]}},
         "base": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": "base.gguf"}},
     }
     model, loras = analyze._walk_model(graph, ["l1", 0])
     assert model == "base.gguf"
-    assert [(lo.name, lo.strength) for lo in loras] == [("accel.safetensors", 1.0), ("style.safetensors", 0.8)]
+    assert [(lo.name, lo.strength) for lo in loras] == [
+        ("accel.safetensors", 1.0), ("style.safetensors", 0.8), ("detail.safetensors", 0.5)]
 
 
 def test_find_sampler_through_inpaint_stitch():

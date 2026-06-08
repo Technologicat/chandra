@@ -1,21 +1,23 @@
-"""concordance — search the prompts embedded across a directory tree of generated images.
+"""concordance — the engine behind `igmt search`.
 
 A concordance of a corpus of pictures: find which generated images match given search fragments in
 their embedded SD prompts. See `briefs/concordance-search.md`.
 
-This module currently provides only the CLI surface; the search implementation (ported and extended
-from `metadata-matching-dirs.py`) is under construction.
+The module keeps the name `concordance` (an indexed listing of where words occur — see the README);
+the CLI surface is the descriptive verb `igmt search`. This module currently provides only the CLI
+surface; the search implementation (ported and extended from `metadata-matching-dirs.py`) is under
+construction.
 """
 
 __all__ = ["add_subparser", "run"]
 
 
 def add_subparser(subparsers):
-    """Register the `concordance` subcommand on the dispatcher's subparsers action."""
+    """Register the `search` subcommand on the dispatcher's subparsers action."""
     p = subparsers.add_parser(
-        "concordance",
+        "search",
         help="search prompts across a directory of images",
-        description=__doc__.strip().splitlines()[0],
+        description="Search the prompts embedded across a directory tree of generated images.",
     )
     p.add_argument("terms", nargs="*", metavar="WORD",
                    help="search fragment(s); ANDed, order-independent, substring match (default mode)")
@@ -30,8 +32,8 @@ def add_subparser(subparsers):
 
 
 def run(args) -> int:
-    """Handle `igmt concordance`. Stub: the search is not implemented yet."""
-    print("concordance: under construction — search not implemented yet.")
+    """Handle `igmt search`. Stub: the search is not implemented yet."""
+    print("search: under construction — not implemented yet.")
     print(f"  terms={args.terms} dirs={args.dir} positive={args.positive} "
           f"negative={args.negative} exact={args.exact}")
     return 0
