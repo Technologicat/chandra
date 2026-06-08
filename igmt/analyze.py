@@ -41,6 +41,7 @@ _SAFE_FUNCS = {
 class Lora:
     name: str
     strength: Optional[float] = None
+    hash: Optional[str] = None          # AutoV2, filled in by the hashing step (--hash)
 
 
 @dataclass
@@ -55,6 +56,7 @@ class Recipe:
     scheduler: Optional[str] = None
     denoise: Optional[object] = None
     model: Optional[str] = None
+    model_hash: Optional[str] = None    # AutoV2, filled in by the hashing step (--hash)
     loras: list = field(default_factory=list)
     vae: Optional[str] = None
     width: Optional[int] = None
@@ -333,9 +335,11 @@ def format_recipe(recipe: Recipe) -> str:
     lines.append(f"negative: {recipe.negative!r}")
     size = f"{recipe.width}x{recipe.height}" if recipe.width and recipe.height else "?"
     lines.append(f"size:     {size}")
-    lines.append(f"model:    {recipe.model!r}")
+    model_hash = f"  [{recipe.model_hash}]" if recipe.model_hash else ""
+    lines.append(f"model:    {recipe.model!r}{model_hash}")
     for lora in recipe.loras:
-        lines.append(f"  lora:   {lora.name!r} (strength {lora.strength})")
+        lora_hash = f"  [{lora.hash}]" if lora.hash else ""
+        lines.append(f"  lora:   {lora.name!r} (strength {lora.strength}){lora_hash}")
     if recipe.vae:
         lines.append(f"vae:      {recipe.vae!r}")
     lines.append(f"sampler:  {recipe.sampler_name!r}  scheduler: {recipe.scheduler!r}  "

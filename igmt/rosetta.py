@@ -14,10 +14,12 @@ the README for the lineage); the CLI surface is the descriptive verbs.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 from . import analyze as _analyze
+from . import hashing as _hashing
 from . import pngchunks
 from . import synthesize as _synthesize
 
@@ -83,49 +85,62 @@ def extract_recipe(png_path):
     return _load(png_path)[1]
 
 
-def _resolve_inputs(args):
-    """Expand args.paths to a PNG list (empty → caller returns usage error); warn on --hash."""
+def _hashing_context(args):
+    """If `--hash` is set and model dirs are available, return (resolver, cache); else None."""
+    if not getattr(args, "hash", False):
+        return None
+    dirs = list(args.models_dir or [])
+    env = os.environ.get("IGMT_MODELS_DIR")
+    if env:
+        dirs += [d for d in env.split(os.pathsep) if d]
+    if not dirs:
+        print("igmt: --hash needs --models-dir (or $IGMT_MODELS_DIR); emitting names only.",
+              file=sys.stderr)
+        return None
+    return (_hashing.ResourceResolver(dirs), _hashing.HashCache())
+
+
+def _process(args, write: bool) -> int:
+    """Shared read → analyze → (hash) → synthesize loop for `show` (write=False) and `inject`."""
     paths = list(iter_png_paths(args.paths))
     if not paths:
         print("igmt: no PNG files given.", file=sys.stderr)
-    if getattr(args, "hash", False):
-        print("igmt: --hash not implemented yet; emitting model/LoRA names only.", file=sys.stderr)
-    return paths
-
-
-def run_show(args) -> int:
-    """`igmt show`: read → analyze → print (read-only)."""
-    paths = _resolve_inputs(args)
-    if not paths:
         return 2
-    status = 0
-    for path in paths:
-        try:
-            recipe = extract_recipe(path)
-        except Exception as e:
-            print(f"{path}: ERROR: {e}", file=sys.stderr)
-            status = 1
-            continue
-        print(f"=== {path} ===")
-        print(_analyze.format_recipe(recipe) if args.recipe else _synthesize.synthesize(recipe))
-        print()
-    return status
-
-
-def run_inject(args) -> int:
-    """`igmt inject`: read → analyze → synthesize → write the parameters chunk in place."""
-    paths = _resolve_inputs(args)
-    if not paths:
-        return 2
+    ctx = _hashing_context(args)
     status = 0
     for path in paths:
         try:
             chunks, recipe = _load(path)
-            params = _synthesize.synthesize(recipe)
-            pngchunks.write_file(path, pngchunks.set_text_field(chunks, "parameters", params))
         except Exception as e:
             print(f"{path}: ERROR: {e}", file=sys.stderr)
             status = 1
             continue
-        print(f"injected → {path}")
+        if ctx is not None:
+            for warning in _hashing.apply_hashes(recipe, *ctx):
+                print(f"{path}: {warning}", file=sys.stderr)
+        params = _synthesize.synthesize(recipe)
+        if write:
+            try:
+                pngchunks.write_file(path, pngchunks.set_text_field(chunks, "parameters", params))
+            except Exception as e:
+                print(f"{path}: ERROR writing: {e}", file=sys.stderr)
+                status = 1
+                continue
+            print(f"injected → {path}")
+        else:
+            print(f"=== {path} ===")
+            print(_analyze.format_recipe(recipe) if args.recipe else params)
+            print()
+    if ctx is not None:
+        ctx[1].save()
     return status
+
+
+def run_show(args) -> int:
+    """`igmt show`: read → analyze → print (read-only)."""
+    return _process(args, write=False)
+
+
+def run_inject(args) -> int:
+    """`igmt inject`: read → analyze → synthesize → write the parameters chunk in place."""
+    return _process(args, write=True)

@@ -79,10 +79,18 @@ def synthesize(recipe, version: str = None) -> str:
     if recipe.width and recipe.height:
         settings.append(f"Size: {recipe.width}x{recipe.height}")
     if recipe.model:
+        if recipe.model_hash:  # AutoV2 — lets CivitAI link the checkpoint to its page
+            settings.append(f"Model hash: {recipe.model_hash}")
         settings.append(f"Model: {_basename_no_ext(recipe.model)}")
     # Denoising strength: emit only when it actually reduced denoise (Forge omits it at 1.0 / txt2img).
     if recipe.denoise is not None and float(recipe.denoise) != 1.0:
         settings.append(f"Denoising strength: {_num(recipe.denoise)}")
+    # Lora hashes: A1111's quoted form. The value carries commas/colons, so it goes late (after the
+    # fields SDPR displays); SDPR's simple parser mangles it into ignored keys, while CivitAI's
+    # quote-aware parser reads it and links each LoRA.
+    hashed = [(_basename_no_ext(lora.name), lora.hash) for lora in recipe.loras if lora.name and lora.hash]
+    if hashed:
+        settings.append('Lora hashes: "' + ", ".join(f"{name}: {h}" for name, h in hashed) + '"')
     settings.append(f"Version: igmt-rosetta {version}")
 
     if settings:

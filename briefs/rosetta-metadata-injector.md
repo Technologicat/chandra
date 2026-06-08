@@ -216,21 +216,37 @@ Resolution:
 Recursion is depth-bounded with cycle detection (graphs are DAGs, but a malformed file shouldn't
 hang us).
 
-## Resource hashing (CivitAI auto-linking) — optional
+## Resource hashing (CivitAI auto-linking) — optional *(implemented)*
 
-Decision: **name + settings always; hashing is opt-in.**
+Decision: **name + settings always; hashing is opt-in.** Implemented in `igmt/hashing.py`.
 
 - Default: emit `Model:` and LoRA names as text. CivitAI shows them; it cannot auto-link without
   hashes.
-- `--hash`: compute **AutoV2** hashes (= `sha256(file)[:10]`, confirmed below) from the actual
-  model/LoRA files and emit `Model hash:` / `Lora hashes:`, enabling CivitAI page links. Requires
-  the files to be locally accessible.
-  - A configurable models directory (or several) is scanned to resolve a `ckpt_name`/`lora_name`
-    (a bare filename in the graph) to a file on disk.
-  - A persistent **hash cache** keyed by (path, size, mtime) — hashing multi-GB files is slow and
-    we process batches of hundreds of images sharing the same few models.
-  - Graceful fallback: a file we can't locate → that resource stays name-only; we warn, we don't
-    fail.
+- `--hash` (on `show` and `inject`): compute **AutoV2** = `sha256(file)[:10]` from the actual
+  model/LoRA files and emit `Model hash:` (before `Model:`) and `Lora hashes: "name: hash, …"`,
+  enabling CivitAI page links. AutoV2 is used for *both* checkpoints and LoRAs (one scheme; LoRA
+  files resolve via by-hash the same way). Requires the files to be locally accessible.
+  - **`--models-dir DIR`** (repeatable) or `$IGMT_MODELS_DIR` (os-pathsep list) names where to look;
+    with `--hash` but no dir, we warn and emit names only. `ResourceResolver` indexes those dirs once
+    (basename → paths) so resolving a graph name like `qwen/style/foo.safetensors` is a dict lookup,
+    preferring a path whose tail matches the full relative name.
+  - A persistent **hash cache** (`HashCache`, JSON under `$XDG_CACHE_HOME/igmt/`) keyed by
+    (resolved path, size, mtime) — multi-GB files shared across a batch are hashed once.
+  - Graceful fallback: a file we can't locate → that resource stays name-only; we warn per file, we
+    never fail the run.
+
+**`Lora hashes:` placement.** Its quoted value carries commas and colons, which SD Prompt Reader's
+*simple* settings regex can't keep whole — so it's emitted **late** (after the fields SDPR displays,
+before `Version`). SDPR mangles it into ignored keys; the displayed fields (Model, Seed, …) parse
+correctly ahead of it, and CivitAI's quote-aware A1111 parser reads the whole field and links each
+LoRA. Hash length: we emit AutoV2 (10) for LoRAs too — the value CivitAI's `by-hash` resolves — to
+be re-confirmed on the live upload (A1111's own LoRA field has historically used a 12-char shorthash;
+if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, model stays AutoV2).
+
+> **AutoV2 confirmed (2026-06-08), live against CivitAI's public `by-hash` API (no auth):** a bogus
+> hash → `404`, and `6ce0161689` → `200` for SD 1.5, whose `SHA256 = 6CE0161689B385…` and
+> `AutoV2 = 6CE0161689`. So AutoV2 = `sha256(file)[:10]`, case-insensitive. The public endpoint also
+> serves as an optional self-check (does our computed hash resolve to the right page?).
 
 > **Confirmed (2026-06-08), live against CivitAI's API, no auth required.**
 > `GET /api/v1/model-versions/by-hash/{hash}` is a public endpoint: queried unauthenticated, a bogus
