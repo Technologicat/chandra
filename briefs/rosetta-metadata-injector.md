@@ -395,9 +395,13 @@ pre-publish rename — see `TODO_DEFERRED.md`.)
 calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live
 parser (no static script to drift): `igmt <tab>` offers `search`/`show`/`inject` (and any future
 subcommand automatically), `igmt show --<tab>` lists its flags. A custom completer restricts file
-arguments to `*.png`. Users enable it once — globally (`activate-global-python-argcomplete`) or
-per-command (`eval "$(register-python-argcomplete igmt)"` in their shell rc); bash and zsh.
-Documented in the README.
+arguments to `*.png`. Users enable it once, per-command, with
+`eval "$(register-python-argcomplete igmt)"` in their shell rc (bash/zsh). Note: the *global*
+`activate-global-python-argcomplete` hook keys off the `# PYTHON_ARGCOMPLETE_OK` marker, which the
+pip/pdm-generated console-script wrapper does **not** carry (the marker is in our `cli.py` source,
+not the wrapper) — so per-command registration is the reliable path for the installed `igmt`. The
+`register-python-argcomplete` helper ships with argcomplete (in the venv; `pipx install argcomplete`
+to have it on PATH globally).
 
 **Lean dependencies (no Pillow).** We read everything from raw PNG chunks ourselves:
 `prompt`/`workflow`/text from `tEXt`/`iTXt`, and image size straight from `IHDR` (width/height are
