@@ -20,17 +20,46 @@ igmt search starfleet captain       # find images whose prompt mentions a starfl
 igmt search catgirl -d imgs | igmt search -n blurry   # chain searches to refine the result set
 ```
 
-`igmt search` is a Unix filter — it prints matching paths and reads candidate paths from stdin when
-piped, so you can refine results by chaining (and pipe them into `wc -l`, `xargs`, `fzf`, …). Within a
-stage, fragments are ANDed; `--any`/`--or` makes them OR and `-v`/`--not` negates the stage, so a
-pipeline expresses full boolean — e.g. `igmt search starship | igmt search --any captain admiral |
-igmt search -v klingon` is *starship AND (captain OR admiral) AND NOT klingon*. Add `-C`/`--context`
-for a highlighted snippet of each match.
-
 Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
 a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and
 non-standard loaders are not. `igmt` walks the embedded ComfyUI graph itself, reconstructs the
 recipe, and re-expresses it in the one format those tools read robustly.
+
+## Searching
+
+`igmt search` builds boolean queries from three primitives — no special syntax or metacharacters:
+
+| | flag | example |
+|---|---|---|
+| **AND** | *(default)* | `igmt search cat photo` — prompt contains both fragments |
+| **OR**  | `--any` (`--or`) | `igmt search --any captain admiral` — either fragment |
+| **NOT** | `-v` (`--invert`, `--not`) | `igmt search -v klingon` — prompt lacks the fragment |
+
+Fragments match as **substrings**, order-independent (`cat photo` also matches `photocatalytic`), and
+are **smart-cased**: an all-lowercase fragment is case-insensitive, a fragment with any uppercase
+letter is case-sensitive (`-i` forces insensitive).
+
+It's a Unix filter — matching paths go to stdout, and when input is piped it reads candidate paths
+from stdin. So **chaining refines**: each stage filters the previous stage's results (set
+intersection), which gives full boolean in conjunctive normal form:
+
+```bash
+igmt search starship | igmt search --any captain admiral | igmt search -v klingon
+#  →  starship AND (captain OR admiral) AND NOT klingon
+```
+
+…and results compose with the rest of the shell:
+
+```bash
+igmt search wizard -d imgs | wc -l                      # count matches
+igmt search cat -d imgs | xargs -d'\n' cp -t picks/     # copy matches elsewhere
+igmt search catgirl -d imgs | fzf                       # pick one interactively
+```
+
+More flags: `-p` / `-n` (search the positive / negative prompt only), `--exact` (match the whole
+query as one contiguous phrase instead of fragments), `-C` / `--context` (print a highlighted snippet
+of each match, colorized on a terminal), `--dirs-only` (print matching directories instead of files),
+`-d DIR` (search roots, repeatable; default is piped stdin, else the current directory).
 
 ## On the names
 
