@@ -22,22 +22,27 @@ def test_version_action(capsys):
     assert "igmt" in capsys.readouterr().out
 
 
-def test_show_no_paths_is_usage_error():
-    # `show`/`inject` require at least one PNG path; with none they report a usage error.
+def test_show_no_paths_prints_usage(capsys):
+    # `show`/`inject` require at least one PNG path; with none they print a short usage (exit 2).
     assert cli.main(["show"]) == 2
+    err = capsys.readouterr().err
+    assert "usage:" in err and "igmt show" in err
 
 
-def test_inject_no_paths_is_usage_error():
+def test_inject_no_paths_prints_usage(capsys):
     assert cli.main(["inject"]) == 2
+    err = capsys.readouterr().err
+    assert "usage:" in err and "igmt inject" in err
 
 
-def test_dispatch_search_no_terms_is_usage_error():
-    # search dispatches and, with no terms, reports a usage error (exit 2).
+def test_search_no_terms_prints_usage(capsys):
     assert cli.main(["search"]) == 2
+    err = capsys.readouterr().err
+    assert "usage:" in err and "igmt search" in err
 
 
-def test_no_command_errors():
-    # subparsers are required: invoking with no subcommand is a usage error (exit code 2).
-    with pytest.raises(SystemExit) as exc:
-        cli.main([])
-    assert exc.value.code == 2
+def test_bare_igmt_lists_commands(capsys):
+    # Bare `igmt` is friendly: it prints the help, which lists the commands, and exits 0.
+    assert cli.main([]) == 0
+    out = capsys.readouterr().out
+    assert "search" in out and "show" in out and "inject" in out

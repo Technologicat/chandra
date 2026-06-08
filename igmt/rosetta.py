@@ -49,13 +49,13 @@ def add_subparser(subparsers):
     _add_paths_arg(show)
     show.add_argument("--recipe", action="store_true",
                       help="print the structured recipe instead of the parameters string")
-    show.set_defaults(func=run_show)
+    show.set_defaults(func=run_show, parser=show)
 
     inject = subparsers.add_parser(
         "inject", help="write A1111/CivitAI metadata into the PNG(s)",
         description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place.")
     _add_paths_arg(inject)
-    inject.set_defaults(func=run_inject)
+    inject.set_defaults(func=run_inject, parser=inject)
 
 
 def iter_png_paths(paths):
@@ -104,7 +104,8 @@ def _process(args, write: bool) -> int:
     """Shared read → analyze → (hash) → synthesize loop for `show` (write=False) and `inject`."""
     paths = list(iter_png_paths(args.paths))
     if not paths:
-        print("igmt: no PNG files given.", file=sys.stderr)
+        args.parser.print_usage(sys.stderr)
+        print(f"{args.parser.prog}: give one or more PNG files or directories.", file=sys.stderr)
         return 2
     ctx = _hashing_context(args)
     status = 0

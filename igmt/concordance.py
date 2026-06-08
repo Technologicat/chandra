@@ -9,6 +9,10 @@ the CLI surface is the descriptive verb `igmt search`.
 Per image we extract `(positive, negative)`: from an A1111 `parameters` chunk if present (Forge
 images, or ones `igmt inject` wrote), otherwise by analyzing the ComfyUI `prompt` graph (so raw,
 un-injected ComfyUI images are searchable too), otherwise the concatenated raw text as a fallback.
+
+Pipe-friendly: stdout carries only matching paths (one per line), so refinement chains naturally —
+`igmt search A -d ~/imgs | igmt search B | igmt search C` — each stage applying its own mode/scope.
+Input is the dirs in `-d` if given, else paths read from stdin when piped, else the current dir.
 """
 
 import json
@@ -30,12 +34,18 @@ def add_subparser(subparsers):
     p.add_argument("terms", nargs="*", metavar="WORD",
                    help="search fragment(s): ANDed, order-independent, substring match (default mode)")
     d = p.add_argument("-d", "--dir", action="append", metavar="DIR",
-                       help="root directory to search (repeatable; default: current directory)")
+                       help="root directory to search (repeatable). Default: read paths from stdin "
+                            "when piped, else the current directory")
     try:
         from argcomplete.completers import DirectoriesCompleter
         d.completer = DirectoriesCompleter()
     except ImportError:
         pass
+    p.add_argument("--stdin", action="store_true",
+                   help="read candidate image paths from stdin, one per line (for chaining: "
+                        "`igmt search A | igmt search B`)")
+    p.add_argument("--dirs-only", action="store_true",
+                   help="print matching directories (deduplicated) instead of individual file paths")
     scope = p.add_mutually_exclusive_group()
     scope.add_argument("-p", "--positive", action="store_true", help="match in the positive prompt only")
     scope.add_argument("-n", "--negative", action="store_true", help="match in the negative prompt only")
@@ -43,7 +53,7 @@ def add_subparser(subparsers):
                    help="match the whole query as one contiguous string (instead of fragments)")
     p.add_argument("-i", "--ignore-case", action="store_true",
                    help="force case-insensitive matching (overrides per-fragment smart-case)")
-    p.set_defaults(func=run)
+    p.set_defaults(func=run, parser=p)
     return p
 
 
@@ -100,42 +110,53 @@ def _matches(haystack, fragments, query, exact, ignore_case):
 
 
 # --------------------------------------------------------------------------------
+# Input resolution
+
+def _input_paths(args):
+    """Yield candidate PNG paths: the `-d` roots (recursed) if given, else stdin when piped, else cwd."""
+    if args.dir:
+        for root in args.dir:
+            yield from sorted(Path(root).rglob("*.png"))
+    elif args.stdin or not sys.stdin.isatty():
+        for line in sys.stdin:
+            line = line.strip()
+            if line:
+                yield Path(line)
+    else:
+        yield from sorted(Path(".").rglob("*.png"))
+
+
+# --------------------------------------------------------------------------------
 # CLI
 
 def run(args) -> int:
     """`igmt search`: find images whose prompt matches. Exit 0 if any match, 1 if none, 2 on misuse."""
     fragments = " ".join(args.terms).split()
     if not fragments:
-        print("search: no search terms given.", file=sys.stderr)
+        args.parser.print_usage(sys.stderr)
+        print(f"{args.parser.prog}: give one or more search terms.", file=sys.stderr)
         return 2
     query = " ".join(args.terms)
-    roots = args.dir or ["."]
     scope = "positive" if args.positive else "negative" if args.negative else "both"
-
-    where = {"positive": "positive prompt", "negative": "negative prompt", "both": "either prompt"}[scope]
-    mode = "exact phrase" if args.exact else "fragments"
-    print(f"Searching {where} for {mode}: {fragments if not args.exact else query!r}", file=sys.stderr)
 
     matched_dirs = set()
     found = False
-    for root in roots:
-        for png in sorted(Path(root).rglob("*.png")):
-            try:
-                positive, negative = extract_prompts(png)
-            except Exception as e:
-                print(f"{png}: ERROR: {e}", file=sys.stderr)
-                continue
-            haystack = {"positive": positive, "negative": negative,
-                        "both": positive + "\n" + negative}[scope]
-            if _matches(haystack, fragments, query, args.exact, args.ignore_case):
-                print(png)
+    for png in _input_paths(args):
+        try:
+            positive, negative = extract_prompts(png)
+        except Exception as e:
+            print(f"{png}: ERROR: {e}", file=sys.stderr)
+            continue
+        haystack = {"positive": positive, "negative": negative,
+                    "both": positive + "\n" + negative}[scope]
+        if _matches(haystack, fragments, query, args.exact, args.ignore_case):
+            found = True
+            if args.dirs_only:
                 matched_dirs.add(str(png.parent))
-                found = True
+            else:
+                print(png, flush=True)  # stream files so `| head` can short-circuit
 
-    if matched_dirs:
-        print("\nDirectories with matches:", file=sys.stderr)
+    if args.dirs_only:
         for d in sorted(matched_dirs):
-            print(f"    {d}", file=sys.stderr)
-    else:
-        print("No matches.", file=sys.stderr)
+            print(d)
     return 0 if found else 1

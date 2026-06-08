@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from igmt import cli, concordance, pngchunks
+from igmt import cli, pngchunks
 from igmt.concordance import _contains, _matches, _split_a1111, extract_prompts
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
@@ -124,3 +124,36 @@ def test_search_no_terms_is_usage_error():
 
 def test_search_no_match_returns_one(corpus):
     assert cli.main(["search", "dragon", "-d", str(corpus)]) == 1
+
+
+def test_search_dirs_only(corpus, capsys):
+    rc = cli.main(["search", "blurry", "-n", "--dirs-only", "-d", str(corpus)])
+    assert rc == 0
+    out = capsys.readouterr().out.strip().splitlines()
+    # blurry is in captain.png and wizard.png (both in corpus root) -> one deduped directory
+    assert out == [str(corpus)]
+
+
+def test_search_reads_paths_from_stdin(corpus, capsys, monkeypatch):
+    import io
+    # Feed an explicit candidate list on stdin (the chaining mechanism); filter it.
+    candidates = "\n".join(str(p) for p in sorted(corpus.rglob("*.png")))
+    monkeypatch.setattr("sys.stdin", io.StringIO(candidates))
+    rc = cli.main(["search", "--stdin", "wizard"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "wizard.png" in out and "captain.png" not in out
+
+
+def test_search_pipeline_intersection(corpus, capsys, monkeypatch):
+    import io
+    # Stage 1: everything with "blurry" in the negative; Stage 2: narrow to those mentioning "wizard".
+    all_pngs = sorted(corpus.rglob("*.png"))
+    monkeypatch.setattr("sys.stdin", io.StringIO("\n".join(str(p) for p in all_pngs)))
+    assert cli.main(["search", "--stdin", "-n", "blurry"]) == 0
+    piped = capsys.readouterr().out  # captain.png + wizard.png
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(piped))
+    assert cli.main(["search", "--stdin", "wizard"]) == 0
+    final = capsys.readouterr().out
+    assert "wizard.png" in final and "captain.png" not in final

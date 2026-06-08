@@ -17,7 +17,11 @@ only happens when you explicitly ask for `inject`.
 igmt show image.png                 # preview the synthesized metadata
 igmt inject *.png                   # write metadata into a batch, in place
 igmt search starfleet captain       # find images whose prompt mentions a starfleet captain
+igmt search catgirl -d imgs | igmt search -n blurry   # chain searches to refine the result set
 ```
+
+`igmt search` is a Unix filter — it prints matching paths and reads candidate paths from stdin when
+piped, so you can refine results by chaining (and pipe them into `wc -l`, `xargs`, `fzf`, …).
 
 Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
 a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and

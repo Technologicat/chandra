@@ -39,7 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Tools for the metadata image generators embed in their output.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    subparsers = parser.add_subparsers(dest="command", metavar="<command>", required=True)
+    # Not required: bare `igmt` prints the command list (see main) rather than erroring.
+    subparsers = parser.add_subparsers(dest="command", metavar="<command>")
     for tool in _SUBTOOLS:
         tool.add_subparser(subparsers)
     return parser
@@ -49,11 +50,15 @@ def main(argv=None) -> int:
     """Entry point for the `igmt` console script.
 
     `argv` defaults to `sys.argv[1:]`; pass an explicit list to drive the dispatcher from tests.
+    Bare `igmt` (no subcommand) prints the help, which lists the available commands.
     """
     parser = build_parser()
     if argcomplete is not None:
         argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
+    if not getattr(args, "func", None):
+        parser.print_help()
+        return 0
     return args.func(args)
 
 

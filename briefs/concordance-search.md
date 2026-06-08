@@ -6,8 +6,10 @@ module name; the CLI verb is **`igmt search`** (descriptive verbs on the surface
 the source — see the README).*
 
 **Status: implemented** (`igmt/concordance.py`, `igmt search`) — fragment + exact modes, per-fragment
-smart-case, `-p`/`-n` scoping, `-i` override, multi-root `-d` (default cwd); grep-style exit codes
-(0 match / 1 none / 2 misuse). Chained search (§5) remains deferred.
+smart-case, `-p`/`-n` scoping, `-i` override, multi-root `-d`, stdin path input + pipe chaining (§5),
+`--dirs-only` output mode; grep-style exit codes (0 match / 1 none / 2 misuse); no-args prints a short
+usage. Output is pipe-clean (matching paths to stdout, nothing else). Planned: an opt-in `--context`
+highlight mode (colorama) for human display.
 
 ## Purpose
 
@@ -55,14 +57,28 @@ global `-i` flag; an explicit override flag can still force one mode if wanted.)
 
 The positive-only / negative-only scoping (`-p` / `-n`) is retained.
 
-### 5. Chained / refining search (planned)
+### 5. Chained / refining search — implemented via pipes
 
-Beyond ANDing fragments *within* one mode, support chaining searches of *different* modes — e.g.
-match an exact phrase, then narrow the result set with a fragment search (or vice versa). The
-semantics are a set-intersection over the matched-file sets, each link carrying its own mode and
-scoping. CLI shape TBD — likely repeated `--and <expr>` groups, or a small expression syntax. This
-covers the workflow of "find the specific phrase, then filter those hits further." Deferred until
-after the core single-search modes land.
+`igmt search` is a Unix filter: stdout carries only matching paths, and when stdin is piped (or
+`--stdin` is given) it reads candidate paths from stdin instead of walking dirs. So refinement is
+just `|`:
+
+    igmt search --exact "starfleet captain" -d ~/imgs | igmt search catgirl | igmt search -n blurry
+
+Each stage applies its own mode/scope; the result is the set-intersection (commutative — pipe order
+doesn't change the final set). It composes with the rest of the shell (`| wc -l`, `| head`,
+`| xargs -d'\n' cp -t picks/`, `| fzf`). Input precedence: `-d` dirs if given, else piped stdin, else
+the current directory. A single-command `--and` form (one dir-walk, all clauses in one invocation)
+remains a possible future convenience, but pipes already deliver the capability — and interop with
+every other tool for free.
+
+### 6. Output modes
+
+Default stdout is matching file paths, one per line (pipe-clean — no header or summary). `--dirs-only`
+prints the deduplicated matching *directories* instead, for the "which folders have hits" question.
+Errors go to stderr. Planned: `--context` (opt-in) — print a snippet of the matching prompt with the
+matched fragments highlighted (colorama), like `grep`'s context view; opt-in so it never pollutes the
+pipe, and colorized only when stdout is a terminal.
 
 ## Search target
 
