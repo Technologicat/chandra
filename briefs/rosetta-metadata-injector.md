@@ -230,8 +230,9 @@ Decision: **name + settings always; hashing is opt-in.** Implemented in `igmt/ha
     with `--hash` but no dir, we warn and emit names only. `ResourceResolver` indexes those dirs once
     (basename → paths) so resolving a graph name like `qwen/style/foo.safetensors` is a dict lookup,
     preferring a path whose tail matches the full relative name.
-  - A persistent **hash cache** (`HashCache`, JSON under `$XDG_CACHE_HOME/igmt/`) keyed by
-    (resolved path, size, mtime) — multi-GB files shared across a batch are hashed once.
+  - A persistent **hash cache** (`HashCache`, JSON under `$XDG_CACHE_HOME/igmt/`, falling back to
+    the XDG default `~/.cache/igmt/` when the var is unset) keyed by (resolved path, size, mtime) —
+    multi-GB files shared across a batch are hashed once.
   - Graceful fallback: a file we can't locate → that resource stays name-only; we warn per file, we
     never fail the run.
 
