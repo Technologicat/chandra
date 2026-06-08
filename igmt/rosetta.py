@@ -4,8 +4,10 @@ Walks the ComfyUI `prompt` graph embedded in a PNG, reconstructs the generation 
 an AUTOMATIC1111 / SD-Forge `parameters` text chunk so that services which don't analyze ComfyUI
 graphs (CivitAI, SD Prompt Reader) recognize the image. See `briefs/rosetta-metadata-injector.md`.
 
-Current status: the read → analyze pipeline is wired — `igmt rosetta <png...>` prints the extracted
-recipe. Synthesis (Recipe → parameters string) and injection are the next slices.
+The tool is read-only by default — `igmt rosetta <png...>` analyzes and prints, writing nothing;
+injection happens only with an explicit `--inject` (destructive-by-default is unsafe for batch runs
+over directories). Current status: the read → analyze pipeline is wired and prints the extracted
+recipe. Synthesis (Recipe → parameters string) and `--inject` are the next slices.
 """
 
 import json
@@ -32,8 +34,6 @@ def add_subparser(subparsers):
         paths.completer = FilesCompleter(("png", "PNG"))
     except ImportError:
         pass
-    p.add_argument("--dry-run", action="store_true",
-                   help="print the synthesized parameters string; write nothing (forthcoming)")
     p.add_argument("--hash", action="store_true",
                    help="compute AutoV2 hashes for model/LoRA resources (forthcoming)")
     p.add_argument("--models-dir", action="append", metavar="DIR",
@@ -81,6 +81,6 @@ def run(args) -> int:
         print(f"=== {path} ===")
         print(_analyze.format_recipe(recipe))
         print()
-    print("(rosetta: showing extracted recipes; synthesis → parameters string and injection are "
-          "not implemented yet.)", file=sys.stderr)
+    print("(rosetta: read-only — showing extracted recipes. Synthesis → parameters string and "
+          "`--inject` (opt-in writing) are not implemented yet.)", file=sys.stderr)
     return status

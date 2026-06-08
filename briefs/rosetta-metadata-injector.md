@@ -245,15 +245,20 @@ Decision: **name + settings always; hashing is opt-in.**
 
 ## CLI design
 
-- **Default output: in-place, no backup** (per user decision). The chunk insertion is lossless
-  surgery (below); the original image bytes and existing chunks are preserved verbatim.
+- **Read-only by default; writing is opt-in via `--inject`.** `igmt rosetta <png...>` analyzes and
+  prints (the synthesized `parameters` string, or the parsed `Recipe`), writing nothing. Injection
+  happens *only* with an explicit `--inject`. Destructive-by-default would be unsafe here — the tool
+  is batch-first over directories of hundreds of images, and a stray `igmt rosetta .` must never
+  rewrite every PNG. The default thus also *is* the inspect mode (no separate `--print` needed).
+- **`--inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
+  original image bytes and existing chunks are preserved verbatim — so once you've opted in, an
+  in-place rewrite is safe and a backup is just clutter.
 - Batch-first: accept files and/or directories (recurse), mirroring the existing
   `metadata-matching-dirs.py` ergonomics for sessions of hundreds of images.
-- Idempotent: re-running on an already-injected image replaces the existing `parameters` chunk in
-  place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
-- Flags (initial): `--hash` (+ `--models-dir`), `--dry-run` (print the synthesized string, write
-  nothing), `--force`/skip-if-present policy, verbosity. A `--print`/inspect mode that dumps the
-  parsed `Recipe` aids debugging and doubles as the analysis entry point.
+- Idempotent: re-running `--inject` on an already-injected image replaces the existing `parameters`
+  chunk in place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
+- Other flags: `--hash` (+ `--models-dir`) for resource hashing; a skip-if-present / `--force`
+  policy; verbosity.
 
 ## PNG chunk surgery (lossless injection)
 

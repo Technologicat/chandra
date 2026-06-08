@@ -11,13 +11,3 @@ After this sprint, migrate the fleet projects to the PEP 639 SPDX form (SPDX exp
 `license-files`, drop the redundant `License ::` classifier).
 
 Discovered during imagegen-metadata-tools setup (2026-06-08).
-
-## rosetta: read-only `--print` mode (dump recipe without modifying the file)
-
-The recipe dump (`analyze.format_recipe`) is useful on its own. Once injection is implemented, add
-an explicit read-only mode (e.g. `--print` / `--dump`) that analyzes and prints the recipe without
-writing anything — so inspection is a deliberate, non-mutating choice rather than today's
-placeholder behavior (where `igmt rosetta` dumps because injection isn't wired yet). The brief
-already lists `--print`; this tracks the implementation.
-
-Discovered during the Analyze stage (2026-06-08).
