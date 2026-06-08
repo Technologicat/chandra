@@ -33,6 +33,7 @@ dependencies = [
     "simpleeval>=0.9.13",   # sandboxed evaluation of Evaluate* node expressions (rosetta scalar resolver)
     "argcomplete>=3.0",     # shell tab-completion for the igmt dispatcher
     "chardet>=5.0",         # defensive non-UTF-8 text decode (concordance)
+    "colorama>=0.4.6",
 ]
 
 [project.urls]

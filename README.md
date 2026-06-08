@@ -21,7 +21,11 @@ igmt search catgirl -d imgs | igmt search -n blurry   # chain searches to refine
 ```
 
 `igmt search` is a Unix filter — it prints matching paths and reads candidate paths from stdin when
-piped, so you can refine results by chaining (and pipe them into `wc -l`, `xargs`, `fzf`, …).
+piped, so you can refine results by chaining (and pipe them into `wc -l`, `xargs`, `fzf`, …). Within a
+stage, fragments are ANDed; `--any`/`--or` makes them OR and `-v`/`--not` negates the stage, so a
+pipeline expresses full boolean — e.g. `igmt search starship | igmt search --any captain admiral |
+igmt search -v klingon` is *starship AND (captain OR admiral) AND NOT klingon*. Add `-C`/`--context`
+for a highlighted snippet of each match.
 
 Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
 a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and

@@ -145,6 +145,43 @@ def test_search_reads_paths_from_stdin(corpus, capsys, monkeypatch):
     assert "wizard.png" in out and "captain.png" not in out
 
 
+def test_search_any_is_or(corpus, capsys):
+    # captain.png has "captain", wizard.png has "wizard": --any matches either; default AND matches neither.
+    assert cli.main(["search", "--any", "captain", "wizard", "-d", str(corpus)]) == 0
+    out = capsys.readouterr().out
+    assert "captain.png" in out and "wizard.png" in out
+    assert cli.main(["search", "captain", "wizard", "-d", str(corpus)]) == 1  # AND: no single image has both
+
+
+def test_search_invert_excludes(corpus, capsys):
+    # -v wizard: everything except the wizard image.
+    assert cli.main(["search", "-v", "wizard", "-d", str(corpus)]) == 0
+    out = capsys.readouterr().out
+    assert "wizard.png" not in out
+    assert "captain.png" in out and "cat.png" in out
+
+
+def test_search_and_not_via_pipe(corpus, capsys, monkeypatch):
+    import io
+    # blurry (captain, wizard) THEN NOT wizard -> captain only. (captain AND NOT wizard)
+    monkeypatch.setattr("sys.stdin", io.StringIO("\n".join(str(p) for p in sorted(corpus.rglob("*.png")))))
+    assert cli.main(["search", "--stdin", "-n", "blurry"]) == 0
+    piped = capsys.readouterr().out
+    monkeypatch.setattr("sys.stdin", io.StringIO(piped))
+    assert cli.main(["search", "--stdin", "-v", "wizard"]) == 0
+    final = capsys.readouterr().out
+    assert "captain.png" in final and "wizard.png" not in final
+
+
+def test_search_context_snippet_no_color_off_tty(corpus, capsys):
+    # capsys stdout is not a TTY -> snippet shown, but no ANSI color codes.
+    assert cli.main(["search", "-C", "captain", "-d", str(corpus)]) == 0
+    out = capsys.readouterr().out
+    assert "captain.png" in out
+    assert "starfleet" in out.lower()   # context around the match is shown
+    assert "\x1b[" not in out           # no color escapes when output isn't a terminal
+
+
 def test_search_pipeline_intersection(corpus, capsys, monkeypatch):
     import io
     # Stage 1: everything with "blurry" in the negative; Stage 2: narrow to those mentioning "wizard".

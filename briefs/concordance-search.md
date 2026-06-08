@@ -6,10 +6,11 @@ module name; the CLI verb is **`igmt search`** (descriptive verbs on the surface
 the source — see the README).*
 
 **Status: implemented** (`igmt/concordance.py`, `igmt search`) — fragment + exact modes, per-fragment
-smart-case, `-p`/`-n` scoping, `-i` override, multi-root `-d`, stdin path input + pipe chaining (§5),
-`--dirs-only` output mode; grep-style exit codes (0 match / 1 none / 2 misuse); no-args prints a short
-usage. Output is pipe-clean (matching paths to stdout, nothing else). Planned: an opt-in `--context`
-highlight mode (colorama) for human display.
+smart-case, `-p`/`-n` scoping, `-i` override, multi-root `-d`, stdin path input + pipe chaining,
+boolean combinators `--any`/`--or` (OR) and `-v`/`--invert`/`--not` (NOT) per clause (§5),
+`--dirs-only` mode, `-C`/`--context` highlighted snippets (colorama, TTY-only) (§6); grep-style exit
+codes (0 match / 1 none / 2 misuse); no-args prints a short usage. Output is pipe-clean (matching
+paths to stdout, nothing else).
 
 ## Purpose
 
@@ -72,13 +73,26 @@ the current directory. A single-command `--and` form (one dir-walk, all clauses 
 remains a possible future convenience, but pipes already deliver the capability — and interop with
 every other tool for free.
 
+**Boolean algebra without a query language.** Three primitives compose to full boolean:
+
+- **AND** — the default within a clause (all fragments must match), and the pipe between clauses.
+- **OR** — `--any` (alias `--or`): a clause matches if *any* fragment is present.
+- **NOT** — `-v`/`--invert` (alias `--not`): the clause's match is negated (grep `-v`).
+
+Chained through pipes this is conjunctive normal form with negated clauses — e.g.
+`igmt search starship | igmt search --any captain admiral | igmt search -v klingon` is
+`starship AND (captain OR admiral) AND NOT klingon`. (De Morgan covers NOR: `-v --any a b` is
+`NOT(a OR b)`.) No metacharacters, no precedence rules — each clause stays a flat fragment list.
+
 ### 6. Output modes
 
 Default stdout is matching file paths, one per line (pipe-clean — no header or summary). `--dirs-only`
 prints the deduplicated matching *directories* instead, for the "which folders have hits" question.
-Errors go to stderr. Planned: `--context` (opt-in) — print a snippet of the matching prompt with the
-matched fragments highlighted (colorama), like `grep`'s context view; opt-in so it never pollutes the
-pipe, and colorized only when stdout is a terminal.
+Errors go to stderr. `-C`/`--context` (opt-in) prints, under each path, a one-line snippet of the
+matching prompt with the matched fragments highlighted (colorama) — a windowed, `grep`-style context
+view. It's opt-in so it never pollutes the pipe, and colorized only when stdout is a TTY and `NO_COLOR`
+is unset (otherwise the snippet is shown plain). An inverted (`-v`) match has nothing to highlight, so
+it shows the prompt head.
 
 ## Search target
 
