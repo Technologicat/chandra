@@ -6,7 +6,7 @@ Everything is one command, **`igmt`**, with three subcommands:
 
 | Command | What it does |
 |---|---|
-| `igmt show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/SD-Forge metadata it *would* write. Read-only. |
+| `igmt show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/SD-Forge metadata that `igmt inject` *would* write. Read-only. |
 | `igmt inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services that don't analyze ComfyUI graphs — notably [CivitAI](https://civitai.com) on upload and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader). |
 | `igmt search <terms…>` | Search the prompts embedded across a directory tree of generated images. |
 
@@ -27,7 +27,7 @@ recipe, and re-expresses it in the one format those tools read robustly.
 ## On the names
 
 The command, `igmt`, is just the project's initials — short to type. The interesting names belong to
-the two engines under the hood (you'll meet them in the source and the design briefs):
+the two engines under the hood (you'll meet them in the source):
 
 - **`rosetta`** powers `show` and `inject`. Named for the
   [Rosetta Stone](https://en.wikipedia.org/wiki/Rosetta_Stone), which carries one message in several
@@ -42,11 +42,10 @@ the two engines under the hood (you'll meet them in the source and the design br
   operation over a corpus of pictures. It only reads — its report goes to your terminal, never into
   the files — which is why it isn't called `scribe`.
 
-The CLI shows you plain verbs; the lineage is there for whoever goes looking.
-
 ## Status
 
-The design briefs live under [`briefs/`](briefs/). `show`/`inject` are implemented through the
-analyze → synthesize → inject pipeline; `search` currently exists as the standalone script
-[`metadata-matching-dirs.py`](metadata-matching-dirs.py) and is being folded in. This README will
-grow into full usage docs as the tools land.
+The design briefs live under [`briefs/`](briefs/). All three subcommands work: `show`/`inject`
+through the analyze → synthesize → inject pipeline (with optional `--hash` AutoV2 resource linking),
+and `search` with fragment/exact modes and per-fragment smart-case. The standalone
+[`metadata-matching-dirs.py`](metadata-matching-dirs.py) is the prototype `search` grew from. This
+README will grow into full usage docs as the tools settle.

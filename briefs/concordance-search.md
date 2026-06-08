@@ -5,6 +5,10 @@
 module name; the CLI verb is **`igmt search`** (descriptive verbs on the surface, layered names in
 the source — see the README).*
 
+**Status: implemented** (`igmt/concordance.py`, `igmt search`) — fragment + exact modes, per-fragment
+smart-case, `-p`/`-n` scoping, `-i` override, multi-root `-d` (default cwd); grep-style exit codes
+(0 match / 1 none / 2 misuse). Chained search (§5) remains deferred.
+
 ## Purpose
 
 Find images in a directory tree by what's written in their SD metadata. After a generative session
@@ -63,7 +67,12 @@ after the core single-search modes land.
 ## Search target
 
 Match against the prompt text the reader extracts (positive and/or negative, per scoping) — only
-that. The current code does **not** actually search filenames; the "filenames are searched because
+that. `extract_prompts` gets `(positive, negative)` from three sources, in order: an A1111
+`parameters` chunk (Forge images, or ones `igmt inject` wrote) split into halves; otherwise the
+ComfyUI `prompt` graph run through `rosetta`'s `analyze` (so raw, un-injected ComfyUI images — the
+user's actual corpus — are searchable, and `-p`/`-n` scoping works on them); otherwise the
+concatenated raw text as a fallback. The current code does **not** actually search filenames; the
+"filenames are searched because
 `pngcheck -ct` prints them too" comment is a relic of the original implementation
 (`00_stuff/metadata-matching-dirs-with-pngcheck.py`), which shelled out to `pngcheck -ct` and
 grepped its text output (filenames included). The current pypng-based version reads chunks directly

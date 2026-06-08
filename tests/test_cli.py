@@ -31,8 +31,9 @@ def test_inject_no_paths_is_usage_error():
     assert cli.main(["inject"]) == 2
 
 
-def test_dispatch_search_stub():
-    assert cli.main(["search"]) == 0
+def test_dispatch_search_no_terms_is_usage_error():
+    # search dispatches and, with no terms, reports a usage error (exit 2).
+    assert cli.main(["search"]) == 2
 
 
 def test_no_command_errors():
