@@ -21,8 +21,9 @@ def test_version_action(capsys):
     assert "igmt" in capsys.readouterr().out
 
 
-def test_dispatch_rosetta_stub():
-    assert cli.main(["rosetta"]) == 0
+def test_rosetta_no_paths_is_usage_error():
+    # rosetta requires at least one PNG path; with none it reports a usage error.
+    assert cli.main(["rosetta"]) == 2
 
 
 def test_dispatch_concordance_stub():
