@@ -1,7 +1,8 @@
 # Brief: ComfyUI → CivitAI/A1111 metadata injector
 
-*Working title for the tool: TBD (bikeshed at end). This document is the design brief; it
-precedes implementation.*
+*The tool is named `rosetta` (analyzer/injector); its companion prompt-search tool is `concordance`
+(its own brief: `briefs/concordance-search.md`). This document is the design brief; it precedes
+implementation.*
 
 ## Problem
 
@@ -78,8 +79,18 @@ We report what the graph contains, we do not editorialize:
 - Negative prompts are emitted even when `cfg == 1` (turbo/step-distilled models bake in CFG and
   run at 1, making the negative inert). The placeholder text the user feeds in acts like a code
   comment; suppressing it would hide a real fact about the graph.
-- Values we cannot resolve are reported as absent, never guessed. We do **not** fall back to the
-  filename prefix (it encodes seed/model/sampler/steps/cfg, but a rename destroys it).
+- Values we cannot resolve are reported as absent, never guessed.
+- **Seed is reliably present** — the `prompt` chunk is the *executed* graph, so it carries the
+  concrete seed actually used, even when the UI widget shows `-1`/randomize (that governs only the
+  *next* run and is a `workflow`-graph artifact). Confirmed across all samples (concrete integer
+  seeds, never `-1`), so the seed needs no special recovery.
+- **Filename as a validated last resort (optional, low priority).** The image's own filename is
+  normally the SaveImage `filename_prefix` plus `_NNNNN_`, and that prefix bakes in
+  `timestamp-seed-model-sampler-steps-cfg`. If the actual filename still matches that template, the
+  file is provably un-renamed, so prefix-encoded values may be trusted for any field genuinely
+  absent from the graph — a *validated read*, not a guess (nobody renames a file to inject false
+  values; renames give descriptive names). Gated on the template match; off by default. Since the
+  seed is already in `prompt`, this is belt-and-suspenders, not a primary path.
 
 ## Architecture
 
@@ -101,6 +112,14 @@ We traverse the **`prompt` (API) graph**: `{node_id: {"class_type": str, "inputs
 each input value is either a literal or a `[node_id, slot]` link. Node ids are **opaque strings**
 (ComfyUI subgraphs produce ids like `"172:77"` — never assume integers).
 
+**The `prompt` graph is the *executed* graph — this is why we walk it, not `workflow`.** ComfyUI
+omits bypassed (Ctrl+B, mode 4), muted (mode 2), and UI-only nodes (`MarkdownNote`, reroutes) from
+`prompt` entirely, reconnecting links through bypassed passthroughs. Verified on the samples:
+`flux2-edit.png` has 26 `workflow` nodes, 7 of them bypassed (the toggled-off extra reference-image
+subgraphs plus an unused LoRA) — *none* appear in its 14-node `prompt`. So toggling LoRAs or
+reference-image chains off (the common edit-mode habit — quicker than rewiring when the count
+changes) needs no special handling: the walk only ever sees what actually ran.
+
 Identification is **by role, not by node id or exact class name**. Node ids are incidental (the
 sample set happens to reuse id `127` for the sampler only because the workflows descend from a
 shared template — the algorithm never keys on an id). Class names proliferate across node packs,
@@ -118,7 +137,11 @@ but the *input-name contract* is stable, so we match on that. The walk:
 4. **Extract prompts.** From the sampler's `positive` / `negative` links, recurse through
    conditioning-passthrough roles until a text-encoder role is reached:
    - text-encoder roles expose a text field: `text` (`CLIPTextEncode`) or `prompt`
-     (`TextEncodeQwenImageEditPlus`, which also ingests the reference image);
+     (`TextEncodeQwenImageEditPlus`, which also ingests the reference image). ComfyUI lets that text
+     field itself be a *link* (converted to a string input — fed by primitive string nodes, "Text
+     Multiline", prompt stylers, string-concat nodes); when it is a link, keep walking upstream
+     until reaching the node that actually holds the literal string (SD Prompt Reader handles this
+     case too, e.g. `format/comfyui.py`'s `isinstance(inputs["text"], list)` branch);
    - passthrough roles expose a `conditioning`/`positive`/`negative` input we follow by *name*
      (`ReferenceLatent`, `InpaintModelConditioning` — note it bundles positive/negative/latent on
      output slots 0/1/2, but we recurse into its *inputs* named `positive`/`negative` —
@@ -131,7 +154,11 @@ but the *input-name contract* is stable, so we match on that. The walk:
 6. **Extract VAE** (extra): the sampler's `optional_vae` or the VAE-decode node's `vae` → a
    VAE-loader role (`vae_name`). Recorded as an extra field, not required.
 7. **Size:** taken from the PNG's own width × height — the most reliable source, and what SD
-   Prompt Reader itself uses. No need to trace latent-image nodes.
+   Prompt Reader itself uses. Tracing latent nodes would be actively wrong here: Flux.2's latent
+   tile geometry differs from earlier models (feeding an old empty-latent node to Flux.2 *doubles*
+   the output pixel size — the tile is now half-size on each axis), and in inpaint/edit-inpaint the
+   size set in the workflow is the *inpaint-region crop* (SD-Forge-style whole-canvas-to-region),
+   not the final image. The PNG's own dimensions sidestep all of it.
 
 ### Observed patterns (from the 23 sample workflows)
 
@@ -157,9 +184,11 @@ All current samples are the user's own and share conventions, but the roles gene
 
 ### The scalar resolver (linked-scalar wrinkle)
 
-A sampler scalar (`steps`, `denoise`, `cfg`, `seed`, …) may be a literal or a link. In img2img the
-`Evaluate*` nodes implement SD-Forge-style **dynamic step scaling** — effective steps ≈
+A sampler scalar (`steps`, `denoise`, `cfg`, `seed`, …) may be a literal or a link. In img2img and
+inpaint the `Evaluate*` nodes implement SD-Forge-style **dynamic step scaling** — effective steps ≈
 `steps × denoise` — so the value reaching the sampler is the *effective* count it actually ran.
+(Edit-inpaint is the exception: edit mode requires `denoise = 1.0`, a full redraw of the region, so
+there is no scaling.)
 
 > **Reporting choice:** we report the **effective** steps (the resolved sampler input = what
 > executed), not a separate configured-steps + denoise pair. This diverges from SD Forge's metadata
@@ -193,8 +222,9 @@ Decision: **name + settings always; hashing is opt-in.**
 
 - Default: emit `Model:` and LoRA names as text. CivitAI shows them; it cannot auto-link without
   hashes.
-- `--hash`: compute **AutoV2** hashes from the actual model/LoRA files and emit `Model hash:` /
-  `Lora hashes:`, enabling CivitAI page links. Requires the files to be locally accessible.
+- `--hash`: compute **AutoV2** hashes (= `sha256(file)[:10]`, confirmed below) from the actual
+  model/LoRA files and emit `Model hash:` / `Lora hashes:`, enabling CivitAI page links. Requires
+  the files to be locally accessible.
   - A configurable models directory (or several) is scanned to resolve a `ckpt_name`/`lora_name`
     (a bare filename in the graph) to a file on disk.
   - A persistent **hash cache** keyed by (path, size, mtime) — hashing multi-GB files is slow and
@@ -202,14 +232,16 @@ Decision: **name + settings always; hashing is opt-in.**
   - Graceful fallback: a file we can't locate → that resource stays name-only; we warn, we don't
     fail.
 
-> **Verification owed:** confirm the exact AutoV2 spec before shipping hashing, from two sources:
-> (1) **AUTOMATIC1111 webui** `modules/hashes.py` (the `sha256` + short-hash logic) and the LoRA
-> extra-networks code that writes `Lora hashes:` — the canonical algorithm Forge and CivitAI track;
-> (2) **CivitAI's API as ground truth** — hash a model we own that's on CivitAI, call
-> `GET /api/v1/model-versions/by-hash/{hash}`, and read the `files[].hashes` object (`AutoV2`,
-> `SHA256`). If our computed hash round-trips to the right model page, the spec is confirmed — a
-> stronger check than any doc. Stated belief to verify: `Model hash`/AutoV2 = `sha256(file)[:10]`,
-> `Lora hashes` shorthash = `sha256(file)[:12]`.
+> **Confirmed (2026-06-08), live against CivitAI's API, no auth required.**
+> `GET /api/v1/model-versions/by-hash/{hash}` is a public endpoint: queried unauthenticated, a bogus
+> hash returns `404 {"error":"Model not found"}` and the SD 1.5 hash `6ce0161689` returns `200` with
+> full JSON. Its `files[].hashes` object exposes `AutoV1`/`AutoV2`/`SHA256`/`CRC32`/`BLAKE3`; for
+> that file `SHA256 = 6CE0161689B385…` and `AutoV2 = 6CE0161689`, so **AutoV2 = `sha256(file)[:10]`**
+> (lookup is case-insensitive). Algorithm: SHA-256 the file, take the first 10 hex chars, emit as
+> `Model hash:`. **Still to confirm at build:** the exact `Lora hashes:` field string A1111 readers
+> expect (10- vs 12-char shorthash, quoting) — check the A1111 LoRA extra-networks source. The
+> public by-hash endpoint also gives us an optional self-check (does our computed hash resolve to
+> the right model page?).
 
 ## CLI design
 
@@ -230,21 +262,23 @@ Instead we operate at the chunk level — the approach already proven in `metada
 read the chunk stream, splice in our `parameters` chunk immediately before `IEND`, and recompute
 its CRC. Image data and the `prompt`/`workflow` chunks stay byte-for-byte untouched.
 
-**tEXt vs iTXt.** `tEXt` is Latin-1 only; `iTXt` is UTF-8. Prompts can contain non-Latin-1
-characters (CJK, emoji, typographic quotes) — which is exactly why `metadata-matching-dirs.py`
-already scans both chunk types (newer Forge emits `iTXt` for such content). So the rule (matching
-PIL/Forge behavior): **write `tEXt` when the `parameters` string is Latin-1-encodable, otherwise
-write `iTXt` (UTF-8)**. SD Prompt Reader reads both transparently via PIL's `info` dict; CivitAI's
-`iTXt` handling is a verification item. Most of the current samples are Latin-1, so `tEXt` is the
-common path, but the fallback is implemented from the start.
+**tEXt vs iTXt.** `tEXt` is Latin-1 only; `iTXt` is UTF-8. Both targets read both transparently:
+SD Prompt Reader via PIL's `info` dict, and CivitAI ingests Forge images — where **newer Forge
+appears to write `iTXt` unconditionally**, even for Latin-1 content (that's what silently broke
+`metadata-matching-dirs.py` until `iTXt` reading was added), so `iTXt` is demonstrably accepted
+downstream. Default rule (matching classic A1111/PIL behavior, and keeping the common case
+greppable without decompression): **write `tEXt` when the `parameters` string is Latin-1-encodable,
+otherwise `iTXt` (UTF-8)**. Because Forge proves `iTXt` is universally accepted, an always-`iTXt`
+mode is a safe simplification if we ever want it; the read path handles both regardless.
 
 **Idempotent replacement.** Before writing, scan for an existing `parameters` chunk in *either*
 `tEXt` *or* `iTXt` form (a previously-injected image, or one from a Forge/Comfy save-metadata
 node, could carry either) and remove it. Exactly one `parameters` chunk is ever present
 afterward — we never stack a second.
 
-(The `workflow` chunk, which the user annotates with Markdown comments documenting model/quant
-choices, is preserved — those comments survive injection.)
+**Both `prompt` and `workflow` chunks survive** — we only add/replace `parameters`, never touching
+them — so the image stays fully reopenable in ComfyUI, and the Markdown-comment annotations the user
+keeps in the `workflow` (documenting model/quant choices) are preserved.
 
 ## Verification plan
 
@@ -259,8 +293,11 @@ choices, is preserved — those comments survive injection.)
 
 ## Tests & fixtures
 
-- Promote a curated subset of `00_stuff/` into `tests/fixtures/` (one PNG per family×mode). The
-  full `00_stuff/` dump (~28 MB) stays out of version control.
+- The fixtures we want are *embedded chunks*, not pixels — and `00_stuff/` is already one PNG per
+  family×mode; it's only large (~28 MB) because each is a full-resolution render. The user will
+  render a **minimal-resolution** set with the same workflows embedded (the chunks are a few KB
+  each; tiny IDAT shrinks the files to a committable size). Those go in `tests/fixtures/` and are
+  tracked; `00_stuff/` stays the gitignored full-res reference (or is dropped once fixtures exist).
 - Unit tests on `Recipe` extraction per fixture (the invariant: this graph → these fields),
   the scalar resolver (literal/primitive/evaluate/unresolved), and chunk surgery (insert, replace,
   idempotency, `pngcheck` clean).
@@ -275,19 +312,34 @@ choices, is preserved — those comments survive injection.)
 
 - No metadata for non-ComfyUI sources (we read ComfyUI `prompt`/`workflow`; A1111-origin images
   already have `parameters`).
-- No JPEG/WEBP output (PNG-first; the EXIF path exists in SD Prompt Reader if needed later).
+- No JPEG/WEBP *output* in v1 (PNG-first; the EXIF path exists in SD Prompt Reader if needed later).
+  This is about the image container — within PNG we may write several textual fields (see
+  "Human-readable metadata for general viewers").
 - No editing/round-tripping of the ComfyUI graph itself — we only *read* it and *add* a chunk.
 - No attempt to evaluate `Evaluate*` expressions beyond what `simpleeval` safely supports;
   anything it refuses resolves to "absent".
+
+## Human-readable metadata for general viewers (Pix)
+
+`parameters` serves the SD tools, but it does nothing for a general Linux image viewer like **Pix**
+(the Linux Mint viewer, a gThumb fork) — yet the prompt should be visible there too, without any SD
+software. Pix/gThumb read standard metadata: for PNG, a `Description`/`Comment` textual chunk, and
+XMP `dc:description`. So, optionally (likely on by default), we *also* write a **human-readable
+summary** (positive/negative prompt + key settings) into a `Description` `tEXt`/`iTXt` chunk
+(and/or XMP), distinct from the machine-oriented `parameters` string.
+
+> **Verification owed:** confirm which field Pix actually surfaces — open an injected output in Pix
+> and check whether it reads PNG `Description`, `Comment`, or XMP `dc:description`, then write the
+> field(s) Pix honors. The user has Pix installed and is the natural verifier.
 
 ## Project shape
 
 Pure-Python PDM project (per the fleet's standard setup). Two CLI tools share a package:
 
 - **`rosetta`** — the new analyzer/injector (this brief's subject).
-- **`concordance`** — the existing prompt-search tool (`metadata-matching-dirs.py`), renamed into
-  the scheme and given an optional directory argument (one or more roots) instead of hardcoding the
-  current directory.
+- **`concordance`** — the prompt-search tool (currently `metadata-matching-dirs.py`), renamed into
+  the scheme, given an optional directory argument, and extended with fragment/exact search modes.
+  See its own brief: `briefs/concordance-search.md`.
 
 Shared PNG-chunk code (the `tEXt`/`iTXt` read/pack/CRC machinery) is factored into a common
 module both tools import. Runtime dependency of note: `simpleeval` (scalar resolver). The
@@ -296,14 +348,10 @@ per the fleet conventions.
 
 ## Naming
 
-Decided: the analyzer/injector is **`rosetta`** — Rosetta Stone: one message, multiple scripts,
-mutually legible; the tool makes the workflow legible to outside tools (surface meaning holds, the
-layered reference rewards the curious). Package name `imagegen-metadata-tools` stays.
-
-The prompt-search tool is renamed into the same archaeology/decipherment register: **`concordance`**
-— the scholarly term for an indexed listing of every occurrence of words in a corpus with their
-locations, which is exactly what searching prompts across a directory of images produces
-(literary/biblical-concordance lineage for the curious). `scribe` was considered and rejected: a
-scribe *writes*, so the name would suggest at first glance a tool that writes into the files,
-whereas this tool is read-only by design (its report goes to stdout, never into the images).
-`concordance` is neutral and accurate.
+Both names are decided: the analyzer/injector is **`rosetta`**, the prompt-search tool is
+**`concordance`** (its own brief: `briefs/concordance-search.md`). Package name
+`imagegen-metadata-tools` stays. The full human-facing rationale — the Rosetta Stone, the deadpan
+"no relation to Apple's Rosetta", and what a concordance is — lives in the project `README.md`,
+where a reader will look for it. In short: `rosetta` makes a workflow legible to outside tools (one
+message, many scripts); `concordance` indexes and searches the text inscribed across a corpus of
+images, and is read-only by design (hence *not* `scribe`, which would imply writing into the files).
