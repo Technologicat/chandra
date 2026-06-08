@@ -79,6 +79,27 @@ the two engines under the hood (you'll meet them in the source):
   operation over a corpus of pictures. It only reads — its report goes to your terminal, never into
   the files — which is why it isn't called `scribe`.
 
+## Shell completion (optional)
+
+`igmt` supports tab-completion via [argcomplete](https://github.com/kislyuk/argcomplete). Enable it
+once by adding this to your `~/.bashrc` (or `~/.zshrc`):
+
+```bash
+eval "$(register-python-argcomplete igmt)"
+```
+
+Open a new shell (or `source` the file) and `igmt <TAB>` will complete subcommands and flags.
+
+`register-python-argcomplete` ships with argcomplete. If `igmt` is installed inside a virtualenv, the
+helper lives there too — to have it on `PATH` in every shell, install argcomplete globally with
+`pipx install argcomplete`. (The *global* `activate-global-python-argcomplete` hook does **not** pick
+up `igmt`: the installed console-script wrapper doesn't carry argcomplete's `# PYTHON_ARGCOMPLETE_OK`
+marker, so per-command registration as above is the reliable way.)
+
+**To disable it:** remove the `eval` line from your shell rc — and, to drop it from the current
+shell immediately, run `complete -r igmt`. If you installed argcomplete solely for this,
+`pipx uninstall argcomplete`.
+
 ## Status
 
 The design briefs live under [`briefs/`](briefs/). All three subcommands work: `show`/`inject`
