@@ -295,9 +295,12 @@ keeps in the `workflow` (documenting model/quant choices) are preserved.
 
 - The fixtures we want are *embedded chunks*, not pixels — and `00_stuff/` is already one PNG per
   family×mode; it's only large (~28 MB) because each is a full-resolution render. The user will
-  render a **minimal-resolution** set with the same workflows embedded (the chunks are a few KB
-  each; tiny IDAT shrinks the files to a committable size). Those go in `tests/fixtures/` and are
-  tracked; `00_stuff/` stays the gitignored full-res reference (or is dropped once fixtures exist).
+  render a fresh, **minimal-resolution** set with the same workflows embedded (the chunks are a few
+  KB each; tiny IDAT shrinks the files to a committable size). Those go in `tests/fixtures/` and are
+  tracked; `00_stuff/` stays the gitignored reference (or is dropped once fixtures exist).
+- The committed fixtures are **generated fresh for publication** (a further reason `00_stuff/`
+  stays untracked). So during the sprint we develop against `00_stuff/`; the tracked
+  `tests/fixtures/` set is created at publish time.
 - Unit tests on `Recipe` extraction per fixture (the invariant: this graph → these fields),
   the scalar resolver (literal/primitive/evaluate/unresolved), and chunk surgery (insert, replace,
   idempotency, `pngcheck` clean).
@@ -334,17 +337,38 @@ summary** (positive/negative prompt + key settings) into a `Description` `tEXt`/
 
 ## Project shape
 
-Pure-Python PDM project (per the fleet's standard setup). Two CLI tools share a package:
+Pure-Python PDM project (per the fleet's standard setup); developed on Python 3.14 with
+`requires-python >= 3.11`. It's an app (CLI), so it **commits `pdm.lock`**.
 
-- **`rosetta`** — the new analyzer/injector (this brief's subject).
-- **`concordance`** — the prompt-search tool (currently `metadata-matching-dirs.py`), renamed into
-  the scheme, given an optional directory argument, and extended with fragment/exact search modes.
-  See its own brief: `briefs/concordance-search.md`.
+**One dispatcher entry point: `igmt`.** A single console script with argparse subparsers routes to
+the subtools — `igmt rosetta ...`, `igmt concordance ...`. One PATH entry no matter how many tools
+we add; `igmt --help` lists the toolbox; the evocative names survive as subcommands; no collision
+with any stray `rosetta` on the user's system. Each subtool module registers its own subparser
+(`add_subparser`) and a `run(args)` handler; the dispatcher wires them up and routes to `args.func`.
+Tools are unit-tested by driving the dispatcher: `cli.main(["rosetta", ...])`. (Distribution name
+stays `imagegen-metadata-tools`; the *import* package is the short `igmt`, matching the command —
+the Pillow→`PIL` pattern.)
 
-Shared PNG-chunk code (the `tEXt`/`iTXt` read/pack/CRC machinery) is factored into a common
-module both tools import. Runtime dependency of note: `simpleeval` (scalar resolver). The
-distribution ships both tools and the README; as an app, it commits its lockfile. Lint/style/CI
-per the fleet conventions.
+- **`rosetta`** — the analyzer/injector (this brief's subject).
+- **`concordance`** — the prompt-search tool (currently `metadata-matching-dirs.py`), renamed,
+  given an optional directory argument, and extended with fragment/exact search modes. See
+  `briefs/concordance-search.md`.
+
+**Tab completion via `argcomplete`.** The `igmt` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
+calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live
+parser (no static script to drift): `igmt <tab>` offers `rosetta`/`concordance` (and any future
+subtool automatically), `igmt rosetta --<tab>` lists its flags. A custom completer restricts file
+arguments to `*.png`. Users enable it once — globally (`activate-global-python-argcomplete`) or
+per-command (`eval "$(register-python-argcomplete igmt)"` in their shell rc); bash and zsh.
+Documented in the README.
+
+**Lean dependencies (no Pillow).** We read everything from raw PNG chunks ourselves:
+`prompt`/`workflow`/text from `tEXt`/`iTXt`, and image size straight from `IHDR` (width/height are
+its first 8 data bytes). So the shared **`pngchunks`** module is a small dependency-free byte-level
+read/splice/CRC implementation (CRC via `zlib.crc32`); it replaces the pypng usage in the current
+script, and both tools import it. Runtime deps reduce to `simpleeval` (rosetta scalar resolver),
+`argcomplete` (completion), and `chardet` (concordance's defensive non-UTF-8 decode). The
+distribution ships both tools and the README. Lint/style/CI per the fleet conventions.
 
 ## Naming
 

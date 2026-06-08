@@ -49,6 +49,15 @@ global `-i` flag; an explicit override flag can still force one mode if wanted.)
 
 The positive-only / negative-only scoping (`-p` / `-n`) is retained.
 
+### 5. Chained / refining search (planned)
+
+Beyond ANDing fragments *within* one mode, support chaining searches of *different* modes — e.g.
+match an exact phrase, then narrow the result set with a fragment search (or vice versa). The
+semantics are a set-intersection over the matched-file sets, each link carrying its own mode and
+scoping. CLI shape TBD — likely repeated `--and <expr>` groups, or a small expression syntax. This
+covers the workflow of "find the specific phrase, then filter those hits further." Deferred until
+after the core single-search modes land.
+
 ## Search target
 
 Match against the prompt text the reader extracts (positive and/or negative, per scoping) — only

@@ -1,0 +1,113 @@
+[project]
+name = "imagegen-metadata-tools"
+version = "0.1.0.dev0"
+description = "Tools for working with the metadata that image generators embed in their output."
+authors = [{ name = "Juha Jeronen", email = "juha.jeronen@jamk.fi" }]
+readme = "README.md"
+license = "BSD-2-Clause"
+license-files = ["LICENSE.md"]
+requires-python = ">=3.11"
+keywords = [
+    "comfyui",
+    "civitai",
+    "stable-diffusion",
+    "metadata",
+    "png",
+    "a1111",
+    "sd-prompt-reader",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "simpleeval>=0.9.13",   # sandboxed evaluation of Evaluate* node expressions (rosetta scalar resolver)
+    "argcomplete>=3.0",     # shell tab-completion for the igmt dispatcher
+    "chardet>=5.0",         # defensive non-UTF-8 text decode (concordance)
+]
+
+[project.urls]
+Homepage = "https://github.com/Technologicat/imagegen-metadata-tools"
+Repository = "https://github.com/Technologicat/imagegen-metadata-tools"
+
+[project.scripts]
+igmt = "igmt.cli:main"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.build]
+includes = ["igmt/"]
+
+[dependency-groups]
+dev = [
+    # Test
+    "pytest>=8.0",
+    "coverage",                # `coverage run -m runtests` / `coverage xml` for CI's coverage workflow
+    "pip",                     # ensures `python -m pip` works in the venv
+
+    # Linters (for local checks — CI also installs them separately)
+    "ruff>=0.14.0",
+    "flake8",                  # Emacs flycheck
+    "autopep8",                # autoformat on save (Emacs)
+
+    # Editor tooling (jedi-based IDE features in Emacs)
+    "jedi>=0.19.2",
+    "epc",                     # Emacs <-> Python RPC
+    "importmagic",             # auto-import suggestions
+
+    # Release and CI-workflow tooling
+    "build",                   # `python -m build --sdist` for pre-release sanity checks
+    "pyyaml>=6.0.3",           # validate .github/workflows/*.yml from the dev venv
+]
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    "00_stuff",                # local non-tracked scratch area
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "SIM"]
+ignore = [
+    # pycodestyle
+    "E203",   # whitespace before ':' — needed for slice alignment
+    "E265",   # block comment should start with '# ' — commented-out code, markers
+    "E301",   # expected 1 blank line — blank lines are semantic paragraph breaks
+    "E302",   # expected 2 blank lines before def — same
+    "E305",   # expected 2 blank lines after end — same
+    "E306",   # expected blank line before nested def — same
+    "E402",   # module level import not at top — conditional/deferred imports
+    "E501",   # line too long — advisory, not enforced
+    "E731",   # lambda assignment — closures are idiomatic in this codebase
+    # flake8-simplify
+    "SIM102",  # collapsible if — nested ifs often represent distinct semantic guards
+    # Note: SIM103 (return condition directly) is intentionally NOT ignored here.
+    # It is enabled as an advisory — CI runs it in a non-failing second pass.
+    "SIM105",  # contextlib.suppress — try/except/pass is more flexible and explicit
+    "SIM108",  # ternary instead of if/else — often less readable, no real gain
+    "SIM114",  # combine if branches — match-casing style; autofix would damage semantics
+    "SIM117",  # combine with statements — nesting shows parent/child relationships
+    "SIM118",  # in-dict-keys — explicit .keys() marks the variable as a dictlike
+    "SIM300",  # yoda conditions — natural reading order preferred
+    "SIM910",  # dict.get with None default — explicit None documents programmer intent
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]  # re-exports via star-import

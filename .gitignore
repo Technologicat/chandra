@@ -15,6 +15,7 @@ venv/
 # PDM
 .pdm-python
 .pdm-build/
+.python-version   # local dev interpreter pin; lockfile + requires-python cover reproducibility
 
 # Tooling caches
 .pytest_cache/

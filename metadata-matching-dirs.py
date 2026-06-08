@@ -35,7 +35,6 @@ make_dynvar(current_path="")
 def cutASCIIZ(bytestring: bytes) -> Tuple[bytes, bytes]:
     end = bytestring.find(b"\x00")
     if end >= 0:
-        result = bytestring[:end]
         return (bytestring[:end], bytestring[end + 1:])
     return (b"", bytestring)
 
