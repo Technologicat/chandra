@@ -51,9 +51,12 @@ The positive-only / negative-only scoping (`-p` / `-n`) is retained.
 
 ## Search target
 
-Match against the prompt text the existing reader already extracts (positive and/or negative, per
-scoping). Filenames are also searched today (because `pngcheck -ct` surfaced them) — keep or drop
-deliberately; if kept, document it, since filename matches can surprise a fragment search.
+Match against the prompt text the reader extracts (positive and/or negative, per scoping) — only
+that. The current code does **not** actually search filenames; the "filenames are searched because
+`pngcheck -ct` prints them too" comment is a relic of the original implementation
+(`00_stuff/metadata-matching-dirs-with-pngcheck.py`), which shelled out to `pngcheck -ct` and
+grepped its text output (filenames included). The current pypng-based version reads chunks directly
+and matches text only. Drop the stale comment during the rename.
 
 ## Naming
 

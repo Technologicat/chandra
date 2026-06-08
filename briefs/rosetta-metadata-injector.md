@@ -156,7 +156,7 @@ but the *input-name contract* is stable, so we match on that. The walk:
 7. **Size:** taken from the PNG's own width × height — the most reliable source, and what SD
    Prompt Reader itself uses. Tracing latent nodes would be actively wrong here: Flux.2's latent
    tile geometry differs from earlier models (feeding an old empty-latent node to Flux.2 *doubles*
-   the output pixel size — the tile is now half-size on each axis), and in inpaint/edit-inpaint the
+   the output pixel size), and in inpaint/edit-inpaint the
    size set in the workflow is the *inpaint-region crop* (SD-Forge-style whole-canvas-to-region),
    not the final image. The PNG's own dimensions sidestep all of it.
 
