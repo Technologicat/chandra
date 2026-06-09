@@ -96,8 +96,8 @@ We report what the graph contains, we do not editorialize:
 
 Four stages, each a small, independently testable unit:
 
-1. **Read** — parse PNG chunks, extract `prompt` (preferred) and `workflow` JSON. Reuse the
-   `tEXt`/`iTXt` machinery already in `metadata-matching-dirs.py`.
+1. **Read** — parse PNG chunks, extract `prompt` (preferred) and `workflow` JSON via the shared
+   `pngchunks` module (`tEXt`/`iTXt`).
 2. **Analyze** — role-based backward walk of the API graph → a normalized `Recipe`
    (positive, negative, sampler params, model, LoRAs, vae, size, extras).
 3. **Synthesize** — render `Recipe` → the A1111 `parameters` string (+ optional resource hashes).
@@ -271,8 +271,8 @@ if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, mod
 - **`inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
   original image bytes and existing chunks are preserved verbatim — so an in-place rewrite is safe
   and a backup is just clutter.
-- Batch-first: both verbs accept files and/or directories (recurse), mirroring the existing
-  `metadata-matching-dirs.py` ergonomics for sessions of hundreds of images.
+- Batch-first: both verbs accept files and/or directories (recurse), suited to sessions of hundreds
+  of images.
 - Idempotent: re-running `inject` on an already-injected image replaces the existing `parameters`
   chunk in place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
 - Other flags: `--hash` (+ `--models-dir`) for resource hashing (on both verbs — `show` previews
@@ -281,14 +281,14 @@ if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, mod
 ## PNG chunk surgery (lossless injection)
 
 We do **not** re-encode via Pillow (that recompresses IDAT and drops/rewrites text chunks).
-Instead we operate at the chunk level — the approach already proven in `metadata-matching-dirs.py`:
-read the chunk stream, splice in our `parameters` chunk immediately before `IEND`, and recompute
+Instead we operate at the chunk level: read the chunk stream, splice in our `parameters` chunk
+immediately before `IEND`, and recompute
 its CRC. Image data and the `prompt`/`workflow` chunks stay byte-for-byte untouched.
 
 **tEXt vs iTXt.** `tEXt` is Latin-1 only; `iTXt` is UTF-8. Both targets read both transparently:
 SD Prompt Reader via PIL's `info` dict, and CivitAI ingests Forge images — where **newer Forge
-appears to write `iTXt` unconditionally**, even for Latin-1 content (that's what silently broke
-`metadata-matching-dirs.py` until `iTXt` reading was added), so `iTXt` is demonstrably accepted
+appears to write `iTXt` unconditionally**, even for Latin-1 content (a `tEXt`-only reader silently
+misses those prompts), so `iTXt` is demonstrably accepted
 downstream. Default rule (matching classic A1111/PIL behavior, and keeping the common case
 greppable without decompression): **write `tEXt` when the `parameters` string is Latin-1-encodable,
 otherwise `iTXt` (UTF-8)**. Because Forge proves `iTXt` is universally accepted, an always-`iTXt`
@@ -387,9 +387,8 @@ command — the Pillow→`PIL` pattern. The `igmt` command name itself is a plac
 pre-publish rename — see `TODO_DEFERRED.md`.)
 
 - **`rosetta`** (engine for `show` / `inject`) — the analyzer/injector (this brief's subject).
-- **`concordance`** (engine for `search`) — the prompt-search tool (currently
-  `metadata-matching-dirs.py`), gaining a directory argument and fragment/exact search modes. See
-  `briefs/concordance-search.md`.
+- **`concordance`** (engine for `search`) — the prompt-search tool: a directory argument and
+  fragment/exact search modes. See `briefs/concordance-search.md`.
 
 **Tab completion via `argcomplete`.** The `igmt` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
 calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live

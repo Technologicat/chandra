@@ -100,10 +100,6 @@ marker, so per-command registration as above is the reliable way.)
 shell immediately, run `complete -r igmt`. If you installed argcomplete solely for this,
 `pipx uninstall argcomplete`.
 
-## Status
+## Design briefs
 
-The design briefs live under [`briefs/`](briefs/). All three subcommands work: `show`/`inject`
-through the analyze → synthesize → inject pipeline (with optional `--hash` AutoV2 resource linking),
-and `search` with fragment/exact modes and per-fragment smart-case. The standalone
-[`metadata-matching-dirs.py`](metadata-matching-dirs.py) is the prototype `search` grew from. This
-README will grow into full usage docs as the tools settle.
+The design briefs live under [`briefs/`](briefs/).

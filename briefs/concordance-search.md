@@ -1,7 +1,6 @@
 # Brief: `concordance` — prompt search across image corpora
 
-*Companion to `rosetta` (see `briefs/rosetta-metadata-injector.md`). This is the existing
-`metadata-matching-dirs.py` tool, folded into the toolkit and extended. `concordance` is the engine
+*Companion to `rosetta` (see `briefs/rosetta-metadata-injector.md`). `concordance` is the engine
 module name; the CLI verb is **`igmt search`** (descriptive verbs on the surface, layered names in
 the source — see the README).*
 
@@ -19,24 +18,17 @@ of hundreds of images, "which ones have a starship captain?" is answered by sear
 positive/negative prompts embedded in the PNGs — a *concordance* of the corpus (an indexed listing
 of where words occur).
 
-## Current state
-
-`metadata-matching-dirs.py` already: walks the current directory recursively, reads positive and
-negative prompts from PNG `tEXt` *and* `iTXt` chunks (Forge format), and matches a search term
-(optionally restricted to positive `-p` or negative `-n`, case-insensitive `-i`). It prints
-matching paths and a summary of matching directories.
-
-## Changes
+## Design
 
 ### 1. Directory argument
 
 Accept one or more root directories as positional arguments; default to the current directory when
-none given. (Today the root is hardcoded to `.`.)
+none given.
 
 ### 2. Shared PNG-chunk module
 
-The `tEXt`/`iTXt` read/pack/CRC machinery currently inlined here is extracted into a common module
-that both `concordance` and `rosetta` import. `concordance` only needs the *read* side.
+The `tEXt`/`iTXt` read/pack/CRC machinery lives in a common module that both `concordance` and
+`rosetta` import. `concordance` only needs the *read* side.
 
 ### 3. Search modes
 
@@ -53,10 +45,10 @@ case where fragment matching is too loose to be useful (e.g. disambiguating a sp
 
 Case sensitivity is inferred per fragment: a fragment containing **at least one uppercase letter**
 is matched **case-sensitively**; an **all-lowercase** fragment is matched **case-insensitively**.
-So `cat` matches "Cat"/"CAT"/"cat", while `Cat` matches only "Cat". (This generalizes today's
-global `-i` flag; an explicit override flag can still force one mode if wanted.)
+So `cat` matches "Cat"/"CAT"/"cat", while `Cat` matches only "Cat". A global `-i` flag forces
+case-insensitive matching for every fragment.
 
-The positive-only / negative-only scoping (`-p` / `-n`) is retained.
+Positive-only / negative-only scoping (`-p` / `-n`) restricts matching to one half of the prompt.
 
 ### 5. Chained / refining search — implemented via pipes
 
@@ -101,12 +93,8 @@ that. `extract_prompts` gets `(positive, negative)` from three sources, in order
 `parameters` chunk (Forge images, or ones `igmt inject` wrote) split into halves; otherwise the
 ComfyUI `prompt` graph run through `rosetta`'s `analyze` (so raw, un-injected ComfyUI images — the
 user's actual corpus — are searchable, and `-p`/`-n` scoping works on them); otherwise the
-concatenated raw text as a fallback. The current code does **not** actually search filenames; the
-"filenames are searched because
-`pngcheck -ct` prints them too" comment is a relic of the original implementation
-(`00_stuff/metadata-matching-dirs-with-pngcheck.py`), which shelled out to `pngcheck -ct` and
-grepped its text output (filenames included). The current pypng-based version reads chunks directly
-and matches text only. Drop the stale comment during the rename.
+concatenated raw text as a fallback. It does **not** search filenames — it reads chunks directly and
+matches only the embedded prompt text.
 
 ## Naming
 
@@ -118,5 +106,5 @@ which is why *not* `scribe`. Full rationale in the project `README.md`.
 ## Non-goals
 
 - No writing into image files (read-only).
-- No regex mode in v1 (fragment + exact cover the use cases; the original used `re` internally, but
-  the user-facing contract is substring fragments, not regex — avoid surprising metacharacters).
+- No regex mode in v1 (fragment + exact cover the use cases; the user-facing contract is substring
+  fragments, not regex — avoid surprising metacharacters).
