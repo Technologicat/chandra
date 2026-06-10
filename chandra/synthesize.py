@@ -87,13 +87,16 @@ def synthesize(recipe, version: str = None) -> str:
         if recipe.model_hash:  # AutoV2 — lets CivitAI link the checkpoint to its page
             settings.append(f"Model hash: {recipe.model_hash}")
         settings.append(f"Model: {_basename_no_ext(recipe.model)}")
-    # Text-encoder / VAE "modules": Forge stores the separate CLIP/T5/VAE files in one "VAE/TE" list
-    # and serializes each as `Module N` (1-indexed, basename without extension). We mirror that, so a
-    # Flux recipe (separate text encoders, which a plain `Model:` field has no slot for) round-trips.
-    modules = list(recipe.text_encoders)
+    # VAE: its own A1111-standard pair (CivitAI links the VAE by its AutoV2 hash). The name is always
+    # emitted; the hash only with --hash. Mirrors the Model hash:/Model: pairing above.
     if recipe.vae:
-        modules.append(recipe.vae)
-    for i, name in enumerate(modules):
+        if recipe.vae_hash:
+            settings.append(f"VAE hash: {recipe.vae_hash}")
+        settings.append(f"VAE: {_basename_no_ext(recipe.vae)}")
+    # Text encoders → Forge's `Module N` (1-indexed, basename without extension). Modern models load
+    # the text encoder from its own file — often an LLM — which a plain `Model:` field has no slot for;
+    # there's no standard hash field for these, so they go name-only (the VAE has its own pair above).
+    for i, name in enumerate(recipe.text_encoders):
         settings.append(f"Module {i + 1}: {_basename_no_ext(name)}")
     # Denoising strength: emit only when it actually reduced denoise (Forge omits it at 1.0 / txt2img).
     if recipe.denoise is not None and float(recipe.denoise) != 1.0:

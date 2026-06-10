@@ -99,20 +99,37 @@ def test_cfg_and_steps_formatting():
     assert sett["CFG scale"] == "4.5"  # real fraction kept
 
 
-def test_module_fields_for_text_encoders_and_vae():
-    # Forge serializes the "VAE/TE" list as Module N (1-indexed, basename without extension); text
-    # encoders first, VAE last. A plain `Model:` field has no slot for Flux's separate encoders.
+def test_module_fields_for_text_encoders():
+    # Text encoders are Forge `Module N` (1-indexed, basename without extension). The VAE is NOT a
+    # module — it gets its own standard VAE: field (see test below). A plain `Model:` field has no
+    # slot for Flux's separate encoders.
     r = Recipe(positive="x", steps=4, sampler_name="euler", model="flux.gguf", width=8, height=8,
                text_encoders=["clip/clip_l.safetensors", "t5xxl_fp16.safetensors"], vae="ae.safetensors")
     _, _, sett = a1111_parse(synthesize(r))
     assert sett["Module 1"] == "clip_l"          # basename, extension and any subdir dropped
     assert sett["Module 2"] == "t5xxl_fp16"
-    assert sett["Module 3"] == "ae"              # VAE comes after the text encoders
+    assert "Module 3" not in sett                # the VAE is not a module
+    assert sett["VAE"] == "ae"                   # it has its own field instead
 
 
-def test_no_module_fields_without_text_encoders_or_vae():
+def test_vae_field_and_hash():
+    r = Recipe(positive="x", steps=4, sampler_name="euler", model="m", width=8, height=8,
+               vae="sub/flux2-vae.safetensors", vae_hash="ABCDEF0123")
+    _, _, sett = a1111_parse(synthesize(r))
+    assert sett["VAE"] == "flux2-vae"            # basename without extension, like Model:
+    assert sett["VAE hash"] == "ABCDEF0123"      # AutoV2, lets CivitAI link the VAE
+
+
+def test_vae_field_without_hash():
+    # Without --hash there's no hash, but the VAE name is still reported (faithful, like Model:).
+    s = synthesize(Recipe(positive="x", steps=4, sampler_name="euler", model="m", width=8, height=8,
+                          vae="ae.safetensors"))
+    assert "VAE: ae" in s and "VAE hash:" not in s
+
+
+def test_no_module_or_vae_fields_when_absent():
     s = synthesize(Recipe(positive="x", steps=4, sampler_name="euler", model="m", width=8, height=8))
-    assert "Module" not in s                      # a self-contained checkpoint emits no Module fields
+    assert "Module" not in s and "VAE" not in s   # a self-contained checkpoint emits neither
 
 
 # --------------------------------------------------------------------------------

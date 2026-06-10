@@ -85,7 +85,8 @@ def test_separate_text_encoders_become_modules():
     r = _recipe("flux2-txt2img.png")
     assert r.text_encoders                                          # a separate encoder file resolved
     params = synthesize.synthesize(r)
-    assert "Module 1:" in params                                    # emitted as a Forge VAE/TE module
+    assert "Module 1:" in params                                    # text encoder → Forge module
+    assert "VAE:" in params                                         # VAE → its own standard field
 
 
 def test_inpaint_stitch_resolves():

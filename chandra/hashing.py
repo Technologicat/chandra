@@ -119,7 +119,7 @@ class HashCache:
 
 
 def apply_hashes(recipe, resolver: ResourceResolver, cache: HashCache):
-    """Fill `recipe.model_hash` and each `lora.hash` in place. Returns a list of warnings."""
+    """Fill `recipe.model_hash`, `recipe.vae_hash`, and each `lora.hash` in place. Returns warnings."""
     warnings = []
     if recipe.model:
         path = resolver.resolve(recipe.model)
@@ -127,6 +127,12 @@ def apply_hashes(recipe, resolver: ResourceResolver, cache: HashCache):
             recipe.model_hash = cache.autov2(path)
         else:
             warnings.append(f"model file not found for hashing: {recipe.model!r}")
+    if recipe.vae:
+        path = resolver.resolve(recipe.vae)
+        if path:
+            recipe.vae_hash = cache.autov2(path)
+        else:
+            warnings.append(f"VAE file not found for hashing: {recipe.vae!r}")
     for lora in recipe.loras:
         if not lora.name:
             continue

@@ -59,6 +59,7 @@ class Recipe:
     model_hash: Optional[str] = None    # AutoV2, filled in by the hashing step (--hash)
     loras: list = field(default_factory=list)
     vae: Optional[str] = None
+    vae_hash: Optional[str] = None      # AutoV2, filled in by the hashing step (--hash)
     text_encoders: list = field(default_factory=list)   # separate CLIP/T5 loader files (Forge "VAE/TE")
     width: Optional[int] = None
     height: Optional[int] = None
@@ -405,7 +406,8 @@ def format_recipe(recipe: Recipe) -> str:
         lora_hash = f"  [{lora.hash}]" if lora.hash else ""
         lines.append(f"  lora:   {lora.name!r} (strength {lora.strength}){lora_hash}")
     if recipe.vae:
-        lines.append(f"vae:      {recipe.vae!r}")
+        vae_hash = f"  [{recipe.vae_hash}]" if recipe.vae_hash else ""
+        lines.append(f"vae:      {recipe.vae!r}{vae_hash}")
     for te in recipe.text_encoders:
         lines.append(f"te:       {te!r}")
     lines.append(f"sampler:  {recipe.sampler_name!r}  scheduler: {recipe.scheduler!r}  "
@@ -437,7 +439,8 @@ def format_description(recipe: Recipe) -> str:
         lora_hash = f"  [{lora.hash}]" if lora.hash else ""
         lines.append(f"LoRA:     {lora.name} (strength {lora.strength}){lora_hash}")
     if recipe.vae:
-        lines.append(f"VAE:      {recipe.vae}")
+        vae_hash = f"  [{recipe.vae_hash}]" if recipe.vae_hash else ""
+        lines.append(f"VAE:      {recipe.vae}{vae_hash}")
     for te in recipe.text_encoders:
         lines.append(f"Text enc: {te}")
     lines.append(f"Sampler:  {recipe.sampler_name} / {recipe.scheduler}")

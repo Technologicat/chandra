@@ -56,7 +56,7 @@ A single newline-structured string:
 ```
 <positive prompt>
 Negative prompt: <negative prompt>
-Steps: 4, Sampler: dpmpp_2m, Scheduler: sgm_uniform, CFG scale: 1, Seed: 384881030039906, Size: 896x1152, Model: flux-2-klein-9b-Q4_K_M, Module 1: Qwen3-8B-UD-Q4_K_XL, Module 2: flux2-vae, Denoising strength: 1, Version: <tool name>
+Steps: 4, Sampler: dpmpp_2m, Scheduler: sgm_uniform, CFG scale: 1, Seed: 384881030039906, Size: 896x1152, Model: flux-2-klein-9b-Q4_K_M, VAE: flux2-vae, Module 1: Qwen3-8B-UD-Q4_K_XL, Denoising strength: 1, Version: <tool name>
 ```
 
 Rules SD Prompt Reader's `A1111` parser imposes (`format/a1111.py`):
@@ -71,12 +71,14 @@ CivitAI additionally recognizes (subset, to confirm during verification):
 - `Model hash: <autov2>` + `Model: <name>` — links the checkpoint to its CivitAI page.
 - `Lora hashes: "name1: hash1, name2: hash2"` — links LoRAs.
 - `Hashes: {json}` — alternative resource-hash carrier.
-- `Module 1: <name>`, `Module 2: …` — SD-Forge's "VAE/TE" list (the separate text-encoder and VAE
-  files), 1-indexed, basename without extension. Modern models (Flux, Qwen, Chroma, …) load the
-  text encoder from its own file — often an LLM (T5, Qwen, Ministral) — which a plain `Model:` field
-  has no slot for; `chandra` emits each as a `Module N`, text encoders first then the VAE, matching
-  Forge's `forge_additional_modules` serialization (`modules/processing.py`). CivitAI links the ones
-  it knows; the rest stay as faithful, human-readable context.
+- `VAE: <name>` + `VAE hash: <autov2>` — the VAE's standard A1111 pair; CivitAI links the VAE by its
+  AutoV2 hash, exactly as for the checkpoint. The name is always emitted; the hash only under `--hash`.
+- `Module 1: <name>`, `Module 2: …` — SD-Forge's "VAE/TE" mechanism, here carrying the separate
+  **text-encoder** files (1-indexed, basename without extension; `modules/processing.py`). Modern
+  models (Flux, Qwen, Chroma, …) load the text encoder from its own file — often an LLM (T5, Qwen,
+  Ministral) — which a plain `Model:` field has no slot for. There's no standard *hash* field for text
+  encoders (and they're rarely CivitAI resources — usually HuggingFace), so they go name-only; the VAE
+  takes the dedicated pair above rather than a module slot, so each resource is represented once.
 - `Denoising strength`, `Version`, and arbitrary extra `Key: value` fields (shown as-is).
 
 ### Honest reporting
@@ -162,8 +164,8 @@ but the *input-name contract* is stable, so we match on that. The walk:
 7. **Extract text encoder(s)** (extra): from the positive text-encoder node, follow its `clip` link
    back through any passthrough (LoRA, `CLIPSetLastLayer`, …) to the loader, collecting the
    `clip_name*` file(s) — `DualCLIPLoader` exposes two. Empty when CLIP is baked into the checkpoint.
-   Together with the VAE, these are emitted as Forge `Module N` fields (see "CivitAI additionally
-   recognizes", above).
+   Emitted as Forge `Module N` fields (see "CivitAI additionally recognizes", above). The VAE gets its
+   own `VAE:`/`VAE hash:` pair instead, so it isn't represented twice.
 8. **Size:** taken from the PNG's own width × height — the most reliable source, and what SD
    Prompt Reader itself uses. Tracing latent nodes would be actively wrong here: Flux.2's latent
    tile geometry differs from earlier models (feeding an old empty-latent node to Flux.2 *doubles*
@@ -234,9 +236,11 @@ Decision: **name + settings always; hashing is opt-in.** Implemented in `chandra
 - Default: emit `Model:` and LoRA names as text. CivitAI shows them; it cannot auto-link without
   hashes.
 - `--hash` (on `show` and `inject`): compute **AutoV2** = `sha256(file)[:10]` from the actual
-  model/LoRA files and emit `Model hash:` (before `Model:`) and `Lora hashes: "name: hash, …"`,
-  enabling CivitAI page links. AutoV2 is used for *both* checkpoints and LoRAs (one scheme; LoRA
-  files resolve via by-hash the same way). Requires the files to be locally accessible.
+  model/LoRA/VAE files and emit `Model hash:` (before `Model:`), `VAE hash:` (before `VAE:`), and
+  `Lora hashes: "name: hash, …"`, enabling CivitAI page links. AutoV2 is used for checkpoints, LoRAs,
+  and the VAE alike (one scheme; all resolve by-hash the same way). Text encoders are *not* hashed:
+  there's no standard infotext hash field for them and they're rarely CivitAI resources. Requires the
+  files to be locally accessible.
   - **`--models-dir DIR`** (repeatable) or `$CHANDRA_MODELS_DIR` (a list in `$PATH` form — colon-
     separated on Linux/macOS, semicolon on Windows, via `os.pathsep`) names where to look;
     with `--hash` but no dir, we warn and emit names only. `ResourceResolver` indexes those dirs once
