@@ -128,6 +128,12 @@ marker, so per-command registration as above is the reliable way.)
 shell immediately, run `complete -r chandra`. If you installed argcomplete solely for this,
 `pipx uninstall argcomplete`.
 
+## Contributing
+
+Found a workflow `chandra` doesn't parse correctly? Bug reports (with an example image) and pull
+requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). One thing up front: please keep
+example images **SFW** (character art is fine), since the issue tracker is public.
+
 ## Design briefs
 
 The design briefs live under [`briefs/`](briefs/).
