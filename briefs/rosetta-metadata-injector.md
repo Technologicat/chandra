@@ -95,6 +95,18 @@ We report what the graph contains, we do not editorialize:
 - Negative prompts are emitted even when `cfg == 1` (turbo/step-distilled models bake in CFG and
   run at 1, making the negative inert). The placeholder text the user feeds in acts like a code
   comment; suppressing it would hide a real fact about the graph.
+- **Inline `<lora:name:strength>` is an A1111-layer convention, not a claim about the source.**
+  ComfyUI keeps LoRAs as separate loader nodes and never writes them into the prompt text; we append
+  the inline tags only in the `parameters` chunk, because that chunk *is* the A1111 representation and
+  inline is the one standard A1111 carrier of a LoRA's *strength* (`Lora hashes:` records name+hash but
+  no weight, and there's no other standard field). This stays honest because we *add* the A1111 layer
+  without disturbing the source: the original ComfyUI `prompt`/`workflow` chunks are untouched (a
+  ComfyUI user re-imports from those, where the prose is pristine), and the human-readable views — the
+  XMP `dc:description` and `chandra show --recipe` — also keep the prose clean, listing LoRAs
+  separately as `LoRA: name (strength X)`. So the inline form lives only where it's an interchange
+  idiom, never presented as how the source tool wrote the prompt. (Whether CivitAI strictly *needs*
+  the inline tag to link LoRAs is unconfirmed — `Lora hashes:` may suffice — but the strength-carrying
+  role settles it regardless.)
 - Values we cannot resolve are reported as absent, never guessed.
 - **Seed is reliably present** — the `prompt` chunk is the *executed* graph, so it carries the
   concrete seed actually used, even when the UI widget shows `-1`/randomize (that governs only the
