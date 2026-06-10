@@ -233,8 +233,9 @@ hang us).
 
 Decision: **name + settings always; hashing is opt-in.** Implemented in `chandra/hashing.py`.
 
-- Default: emit `Model:` and LoRA names as text. CivitAI shows them; it cannot auto-link without
-  hashes.
+- Default: emit `Model:` and LoRA names as text. Readable by a human and by SD Prompt Reader, but
+  CivitAI keys its resource detection off hashes — without them it surfaces nothing (confirmed on a
+  live upload), so a name alone neither links nor displays as a resource there.
 - `--hash` (on `show` and `inject`): compute **AutoV2** = `sha256(file)[:10]` from the actual
   model/LoRA/VAE files and emit `Model hash:` (before `Model:`), `VAE hash:` (before `VAE:`), and
   `Lora hashes: "name: hash, …"`, enabling CivitAI page links. AutoV2 is used for checkpoints, LoRAs,

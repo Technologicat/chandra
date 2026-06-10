@@ -37,6 +37,32 @@ a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, 
 non-standard loaders are not. `chandra` walks the embedded ComfyUI graph itself, reconstructs the
 recipe, and re-expresses it in the one format those tools read robustly.
 
+## Linking resources on CivitAI (`--hash`)
+
+By default the metadata names the checkpoint, LoRAs, and VAE as plain text — readable by a human and
+by SD Prompt Reader, but invisible to CivitAI, which keys its resource detection off hashes and
+surfaces nothing without them. Add `--hash` (to `show` or `inject`) and `chandra` computes the AutoV2
+hash (`sha256[:10]`) of each file and emits `Model hash:`, `Lora hashes:`, and `VAE hash:`, which
+CivitAI matches to the corresponding resource pages on upload:
+
+```bash
+chandra inject *.png --hash --models-dir ~/ComfyUI/models
+```
+
+Hashing needs the actual files, so tell `chandra` where they live — either with `--models-dir DIR`
+(repeatable) or via the **`CHANDRA_MODELS_DIR`** environment variable, a `PATH`-style list of
+directories (colon-separated on Linux/macOS, semicolon on Windows):
+
+```bash
+export CHANDRA_MODELS_DIR=~/ComfyUI/models:~/extra/loras
+chandra inject *.png --hash          # picks up the dirs from the environment
+```
+
+The directories are indexed once and hashes are cached (keyed by path, size, and mtime), so a
+multi-GB checkpoint shared across a batch is hashed only the first time. Separate text encoders —
+common on modern models (Flux, Qwen, …), often an LLM — are emitted as SD-Forge `Module N` fields;
+they aren't hashed, as there's no standard infotext hash field for them.
+
 ## Seeing the recipe in a general image viewer
 
 `inject` also embeds a clean, human-readable rendering of the recipe — the same information as
