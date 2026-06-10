@@ -67,18 +67,26 @@ Rules SD Prompt Reader's `A1111` parser imposes (`format/a1111.py`):
   can contain commas (model paths, LoRA lists) go in quoted forms CivitAI understands, or last.
 - `Size` is parsed as `WxH`.
 
-CivitAI additionally recognizes (subset, to confirm during verification):
+CivitAI's auto-detection links (confirmed on live uploads):
 - `Model hash: <autov2>` + `Model: <name>` — links the checkpoint to its CivitAI page.
 - `Lora hashes: "name1: hash1, name2: hash2"` — links LoRAs.
 - `Hashes: {json}` — alternative resource-hash carrier.
-- `VAE: <name>` + `VAE hash: <autov2>` — the VAE's standard A1111 pair; CivitAI links the VAE by its
-  AutoV2 hash, exactly as for the checkpoint. The name is always emitted; the hash only under `--hash`.
-- `Module 1: <name>`, `Module 2: …` — SD-Forge's "VAE/TE" mechanism, here carrying the separate
-  **text-encoder** files (1-indexed, basename without extension; `modules/processing.py`). Modern
-  models (Flux, Qwen, Chroma, …) load the text encoder from its own file — often an LLM (T5, Qwen,
-  Ministral) — which a plain `Model:` field has no slot for. There's no standard *hash* field for text
-  encoders (and they're rarely CivitAI resources — usually HuggingFace), so they go name-only; the VAE
-  takes the dedicated pair above rather than a module slot, so each resource is represented once.
+
+Its resource panel is **hash-keyed**: a resource with no hash isn't shown at all (not merely
+unlinked). Empirically its detection covers **only the checkpoint and LoRAs** — it does *nothing*
+with the VAE or text encoders (both tested on a live upload: `VAE hash:` doesn't link, `Module N`
+isn't displayed). We emit those anyway, because the other readers do use them — see below.
+
+Faithful fields the *other* readers (SD Prompt Reader, general viewers, a human) consume — CivitAI
+ignores these, but they're standard and useful, so we emit them for fidelity:
+- `VAE: <name>` + `VAE hash: <autov2>` — the VAE's standard A1111 pair. Name always; hash only under
+  `--hash`. The VAE takes this dedicated pair rather than a module slot, so it's represented once.
+- `Module 1: <name>`, `Module 2: …` — SD-Forge's "VAE/TE" mechanism (`modules/processing.py`), here
+  carrying the separate **text-encoder** files (1-indexed, basename without extension). Modern models
+  (Flux, Qwen, Chroma, …) load the text encoder from its own file — often an LLM (T5, Qwen, Ministral)
+  — which materially shapes the result and which a plain `Model:` field has no slot for. No standard
+  *hash* field exists for them (and they're rarely CivitAI resources — usually HuggingFace), so they
+  go name-only.
 - `Denoising strength`, `Version`, and arbitrary extra `Key: value` fields (shown as-is).
 
 ### Honest reporting
@@ -238,10 +246,11 @@ Decision: **name + settings always; hashing is opt-in.** Implemented in `chandra
   live upload), so a name alone neither links nor displays as a resource there.
 - `--hash` (on `show` and `inject`): compute **AutoV2** = `sha256(file)[:10]` from the actual
   model/LoRA/VAE files and emit `Model hash:` (before `Model:`), `VAE hash:` (before `VAE:`), and
-  `Lora hashes: "name: hash, …"`, enabling CivitAI page links. AutoV2 is used for checkpoints, LoRAs,
-  and the VAE alike (one scheme; all resolve by-hash the same way). Text encoders are *not* hashed:
-  there's no standard infotext hash field for them and they're rarely CivitAI resources. Requires the
-  files to be locally accessible.
+  `Lora hashes: "name: hash, …"`. The checkpoint and LoRA hashes drive CivitAI's page links (the LoRA
+  case is confirmed live); the VAE hash does *not* link there (tested) — it's emitted for file identity
+  and consistency, as a standard A1111 field other readers use. AutoV2 is one scheme for all three
+  (they resolve by-hash the same way). Text encoders are *not* hashed: no standard infotext hash field
+  exists for them and they're rarely CivitAI resources. Requires the files to be locally accessible.
   - **`--models-dir DIR`** (repeatable) or `$CHANDRA_MODELS_DIR` (a list in `$PATH` form — colon-
     separated on Linux/macOS, semicolon on Windows, via `os.pathsep`) names where to look;
     with `--hash` but no dir, we warn and emit names only. `ResourceResolver` indexes those dirs once

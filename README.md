@@ -39,11 +39,11 @@ recipe, and re-expresses it in the one format those tools read robustly.
 
 ## Linking resources on CivitAI (`--hash`)
 
-By default the metadata names the checkpoint, LoRAs, and VAE as plain text — readable by a human and
-by SD Prompt Reader, but invisible to CivitAI, which keys its resource detection off hashes and
-surfaces nothing without them. Add `--hash` (to `show` or `inject`) and `chandra` computes the AutoV2
-hash (`sha256[:10]`) of each file and emits `Model hash:`, `Lora hashes:`, and `VAE hash:`, which
-CivitAI matches to the corresponding resource pages on upload:
+By default the checkpoint and LoRAs are named as plain text — readable by a human and by SD Prompt
+Reader, but invisible to CivitAI, which keys its resource detection off hashes and surfaces nothing
+without them. Add `--hash` (to `show` or `inject`) and `chandra` computes the AutoV2 hash
+(`sha256[:10]`) of each file and emits `Model hash:` and `Lora hashes:`, which CivitAI matches to the
+corresponding resource pages on upload:
 
 ```bash
 chandra inject *.png --hash --models-dir ~/ComfyUI/models
@@ -59,9 +59,14 @@ chandra inject *.png --hash          # picks up the dirs from the environment
 ```
 
 The directories are indexed once and hashes are cached (keyed by path, size, and mtime), so a
-multi-GB checkpoint shared across a batch is hashed only the first time. Separate text encoders —
-common on modern models (Flux, Qwen, …), often an LLM — are emitted as SD-Forge `Module N` fields;
-they aren't hashed, as there's no standard infotext hash field for them.
+multi-GB checkpoint shared across a batch is hashed only the first time. (Only the checkpoint and
+LoRAs link on CivitAI — its detection covers nothing else.)
+
+The recipe also records the **VAE** (`VAE:`, plus `VAE hash:` under `--hash`) and any separate
+**text encoders** — common on modern models (Flux, Qwen, …), often an LLM — as SD-Forge `Module N`
+fields. CivitAI ignores both, but they're standard, faithful metadata that SD Prompt Reader, general
+image viewers, and `chandra show --recipe` display; the text encoder in particular materially shapes
+the result, so it's worth recording. Text encoders aren't hashed (no standard infotext hash field).
 
 ## Seeing the recipe in a general image viewer
 

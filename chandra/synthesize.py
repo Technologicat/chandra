@@ -87,8 +87,9 @@ def synthesize(recipe, version: str = None) -> str:
         if recipe.model_hash:  # AutoV2 — lets CivitAI link the checkpoint to its page
             settings.append(f"Model hash: {recipe.model_hash}")
         settings.append(f"Model: {_basename_no_ext(recipe.model)}")
-    # VAE: its own A1111-standard pair (CivitAI links the VAE by its AutoV2 hash). The name is always
-    # emitted; the hash only with --hash. Mirrors the Model hash:/Model: pairing above.
+    # VAE: its own A1111-standard pair (the slot SD Prompt Reader and humans read). Name always; hash
+    # only with --hash — mirroring Model hash:/Model:. CivitAI doesn't auto-link VAEs from the hash as
+    # it does checkpoints/LoRAs (tested), but the hash stays for file identity and consistency.
     if recipe.vae:
         if recipe.vae_hash:
             settings.append(f"VAE hash: {recipe.vae_hash}")
