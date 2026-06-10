@@ -1,5 +1,6 @@
-# Sample workflow images — scratch/staging dump (~28 MB).
-# A curated subset will be promoted into tests/fixtures/ instead.
+# Local ComfyUI sample images — scratch/staging dump (~28 MB), full images with prompts/docs.
+# The committed test corpus is built from these with `chandra scrub` (anonymized skeletons:
+# no pixels, no prose, just graph structure) and lives in tests/fixtures/.
 00_stuff/
 
 # Python
