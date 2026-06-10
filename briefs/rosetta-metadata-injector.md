@@ -412,17 +412,21 @@ Pure-Python PDM project (per the fleet's standard setup); developed on Python 3.
 `requires-python >= 3.11`. It's an app (CLI), so it **commits `pdm.lock`**.
 
 **One dispatcher entry point: `chandra`.** A single console script with argparse subparsers routes to
-three descriptive verbs — `chandra search`, `chandra show`, `chandra inject`. One PATH entry no matter how
-many subcommands we add; `chandra --help` lists them; verbs are self-documenting (descriptive beats
-evocative as subcommands — `git commit`, not `git rosetta`). The engine modules keep their layered
-names — `rosetta` powers `show`/`inject`, `concordance` powers `search` (lineage in the README).
-Each module registers its subparser(s) via `add_subparser` and sets an `args.func`; the dispatcher
-routes. Tools are unit-tested by driving the dispatcher: `cli.main(["show", ...])`. (Distribution,
-import package, and command are all `chandra` — naming lore in the README.)
+four descriptive verbs — `chandra search`, `chandra show`, `chandra inject`, `chandra scrub`. One PATH
+entry no matter how many subcommands we add; `chandra --help` lists them; verbs are self-documenting
+(descriptive beats evocative as subcommands — `git commit`, not `git rosetta`). The engine modules
+keep their layered names — `rosetta` powers `show`/`inject`, `concordance` powers `search`,
+`palimpsest` powers `scrub` (lineage in the README). Each module registers its subparser(s) via
+`add_subparser` and sets an `args.func`; the dispatcher routes. Tools are unit-tested by driving the
+dispatcher: `cli.main(["show", ...])`. (Distribution, import package, and command are all `chandra` —
+naming lore in the README.)
 
 - **`rosetta`** (engine for `show` / `inject`) — the analyzer/injector (this brief's subject).
 - **`concordance`** (engine for `search`) — the prompt-search tool: a directory argument and
   fragment/exact search modes. See `briefs/concordance-search.md`.
+- **`palimpsest`** (engine for `scrub`) — reduces a ComfyUI PNG to an anonymized structural skeleton,
+  for privacy-safe bug reports and as the source of the committed test fixtures. See
+  `briefs/palimpsest-scrub.md`.
 
 **Tab completion via `argcomplete`.** The `chandra` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
 calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live

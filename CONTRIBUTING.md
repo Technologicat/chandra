@@ -9,14 +9,21 @@ and custom nodes are a moving target, so there will be workflows it doesn't yet 
 prompt that comes out empty, a model or LoRA it misses, an exotic loader it doesn't recognize.
 
 If you hit one, please [open an issue](https://github.com/Technologicat/chandra/issues) and **attach
-an example image** whose embedded metadata isn't parsed correctly. The metadata *is* the bug report,
-so a screenshot or a copy-pasted prompt won't do — we need the actual file with its chunks intact.
+an example** whose embedded metadata isn't parsed correctly. The metadata *is* the bug report, so a
+screenshot or a copy-pasted prompt won't do — we need the graph structure with its chunks intact.
 
-> **Attach the PNG inside a `.zip`.** GitHub (like many platforms) may re-encode or strip metadata
-> from images you drop straight into the comment box — which would throw away the very chunks we need
-> to debug. Zipping the PNG and attaching the `.zip` stores the bytes verbatim. (If you'd like to
-> double-check what's in there first, `chandra show --recipe your.png` prints what chandra currently
-> makes of it.)
+**The easy, privacy-safe way: `chandra scrub your.png`.** This writes a `your.scrubbed.png` reduced to
+an anonymized skeleton — the rendered image is gone, prompt text is replaced with placeholders, and
+any notes you've added to the workflow (Note / Markdown Note nodes) are dropped, but the graph wiring
+and model names that reproduce the bug remain.
+It's small, it carries nothing personal, and there's no image to worry about. (Have a look
+with `chandra show --recipe your.scrubbed.png` before posting — and if some custom node tucked text
+somewhere unexpected, mention it on the issue.)
+
+> **If you do attach the full PNG instead, put it inside a `.zip`.** GitHub (like many platforms) may
+> re-encode or strip metadata from images you drop straight into the comment box — which would throw
+> away the very chunks we need to debug. Zipping the PNG stores the bytes verbatim. (A scrubbed PNG,
+> being metadata-only, should be zipped too.)
 
 Whether a given workflow ends up supported is a judgment call — some are common enough to be worth a
 dedicated code path, others are one-offs that aren't. Either way, a real example is the most useful

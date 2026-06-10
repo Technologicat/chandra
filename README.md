@@ -9,6 +9,7 @@ Everything is one command, **`chandra`**, with three subcommands:
 | `chandra show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/SD-Forge metadata that `chandra inject` *would* write. Read-only. |
 | `chandra inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services that don't analyze ComfyUI graphs — notably [CivitAI](https://civitai.com) on upload and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader). |
 | `chandra search <terms…>` | Search the prompts embedded across a directory tree of generated images. |
+| `chandra scrub <png…>` | Strip a ComfyUI image to an anonymized skeleton — graph wiring kept, image/prompts/docs removed — safe to share when reporting a parsing bug. Writes a copy; never modifies the original. |
 
 Reading and writing are deliberately separate commands: `show` never modifies anything, and writing
 only happens when you explicitly ask for `inject`.
@@ -131,8 +132,10 @@ shell immediately, run `complete -r chandra`. If you installed argcomplete solel
 ## Contributing
 
 Found a workflow `chandra` doesn't parse correctly? Bug reports (with an example image) and pull
-requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). One thing up front: please keep
-example images **SFW** (character art is fine), since the issue tracker is public.
+requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Two things up front: you can run
+`chandra scrub your.png` to produce an anonymized skeleton (no image, no prompt text, just the graph
+wiring that reproduces the bug) to attach instead of the original; and please keep any example images
+**SFW** (character art is fine), since the issue tracker is public.
 
 ## Design briefs
 
