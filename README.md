@@ -78,6 +78,13 @@ dedicated prompt reader just to glance at what made an image. This is on by defa
 to write only the machine-oriented `parameters` chunk. The two layers are independent and both
 lossless — the original ComfyUI `prompt`/`workflow` chunks are never touched.
 
+LoRAs differ between the layers, by design. The machine `parameters` chunk renders them in A1111's
+inline `<lora:name:strength>` notation — that's the format's idiom, and the only standard place a
+LoRA's *strength* is recorded there. ComfyUI itself never writes LoRAs into the prompt text, so the
+human-readable views keep the prose clean and list them separately (`LoRA: name (strength X)` in the
+description and `chandra show --recipe`). The inline form lives only where it's an interchange
+convention; it's never presented as how the source tool wrote your prompt.
+
 ## Searching
 
 `chandra search` builds boolean queries from three primitives — no special syntax or metacharacters:
