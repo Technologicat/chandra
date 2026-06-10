@@ -1,19 +1,19 @@
-"""concordance — the engine behind `igmt search`.
+"""concordance — the engine behind `chandra search`.
 
 A concordance of a corpus of pictures: find which generated images match given search fragments in
 their embedded SD prompts. See `briefs/concordance-search.md`.
 
 The module keeps the name `concordance` (an indexed listing of where words occur — see the README);
-the CLI surface is the descriptive verb `igmt search`.
+the CLI surface is the descriptive verb `chandra search`.
 
 Per image we extract `(positive, negative)`: from an A1111 `parameters` chunk if present (Forge
-images, or ones `igmt inject` wrote), otherwise by analyzing the ComfyUI `prompt` graph (so raw,
+images, or ones `chandra inject` wrote), otherwise by analyzing the ComfyUI `prompt` graph (so raw,
 un-injected ComfyUI images are searchable too), otherwise the concatenated raw text as a fallback.
 
 Boolean search without a query language: AND is the default within a clause (and the pipe between
 clauses), `--any` makes a clause OR, and `-v/--invert` negates a clause. Chained through pipes that
 is conjunctive normal form with negated clauses — effectively full boolean. Pipe-friendly: stdout
-carries only matching paths, so refinement chains as `igmt search A | igmt search B`.
+carries only matching paths, so refinement chains as `chandra search A | chandra search B`.
 """
 
 import json
@@ -51,7 +51,7 @@ def add_subparser(subparsers):
         pass
     p.add_argument("--stdin", action="store_true",
                    help="read candidate image paths from stdin, one per line (for chaining: "
-                        "`igmt search A | igmt search B`)")
+                        "`chandra search A | chandra search B`)")
     p.add_argument("--dirs-only", action="store_true",
                    help="print matching directories (deduplicated) instead of individual file paths")
     p.add_argument("-C", "--context", action="store_true",
@@ -199,7 +199,7 @@ def _input_paths(args):
 # CLI
 
 def run(args) -> int:
-    """`igmt search`: find images whose prompt matches. Exit 0 if any match, 1 if none, 2 on misuse."""
+    """`chandra search`: find images whose prompt matches. Exit 0 if any match, 1 if none, 2 on misuse."""
     fragments = " ".join(args.terms).split()
     if not fragments:
         args.parser.print_usage(sys.stderr)

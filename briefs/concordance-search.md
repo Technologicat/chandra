@@ -1,10 +1,10 @@
 # Brief: `concordance` — prompt search across image corpora
 
 *Companion to `rosetta` (see `briefs/rosetta-metadata-injector.md`). `concordance` is the engine
-module name; the CLI verb is **`igmt search`** (descriptive verbs on the surface, layered names in
+module name; the CLI verb is **`chandra search`** (descriptive verbs on the surface, layered names in
 the source — see the README).*
 
-**Status: implemented** (`igmt/concordance.py`, `igmt search`) — fragment + exact modes, per-fragment
+**Status: implemented** (`chandra/concordance.py`, `chandra search`) — fragment + exact modes, per-fragment
 smart-case, `-p`/`-n` scoping, `-i` override, multi-root `-d`, stdin path input + pipe chaining,
 boolean combinators `--any`/`--or` (OR) and `-v`/`--invert`/`--not` (NOT) per clause (§5),
 `--dirs-only` mode, `-C`/`--context` highlighted snippets (colorama, TTY-only) (§6); grep-style exit
@@ -52,11 +52,11 @@ Positive-only / negative-only scoping (`-p` / `-n`) restricts matching to one ha
 
 ### 5. Chained / refining search — implemented via pipes
 
-`igmt search` is a Unix filter: stdout carries only matching paths, and when stdin is piped (or
+`chandra search` is a Unix filter: stdout carries only matching paths, and when stdin is piped (or
 `--stdin` is given) it reads candidate paths from stdin instead of walking dirs. So refinement is
 just `|`:
 
-    igmt search --exact "starfleet captain" -d ~/imgs | igmt search catgirl | igmt search -n blurry
+    chandra search --exact "starfleet captain" -d ~/imgs | chandra search catgirl | chandra search -n blurry
 
 Each stage applies its own mode/scope; the result is the set-intersection (commutative — pipe order
 doesn't change the final set). It composes with the rest of the shell (`| wc -l`, `| head`,
@@ -72,7 +72,7 @@ every other tool for free.
 - **NOT** — `-v`/`--invert` (alias `--not`): the clause's match is negated (grep `-v`).
 
 Chained through pipes this is conjunctive normal form with negated clauses — e.g.
-`igmt search starship | igmt search --any captain admiral | igmt search -v klingon` is
+`chandra search starship | chandra search --any captain admiral | chandra search -v klingon` is
 `starship AND (captain OR admiral) AND NOT klingon`. (De Morgan covers NOR: `-v --any a b` is
 `NOT(a OR b)`.) No metacharacters, no precedence rules — each clause stays a flat fragment list.
 
@@ -90,7 +90,7 @@ it shows the prompt head.
 
 Match against the prompt text the reader extracts (positive and/or negative, per scoping) — only
 that. `extract_prompts` gets `(positive, negative)` from three sources, in order: an A1111
-`parameters` chunk (Forge images, or ones `igmt inject` wrote) split into halves; otherwise the
+`parameters` chunk (Forge images, or ones `chandra inject` wrote) split into halves; otherwise the
 ComfyUI `prompt` graph run through `rosetta`'s `analyze` (so raw, un-injected ComfyUI images — the
 user's actual corpus — are searchable, and `-p`/`-n` scoping works on them); otherwise the
 concatenated raw text as a fallback. It does **not** search filenames — it reads chunks directly and
@@ -98,7 +98,7 @@ matches only the embedded prompt text.
 
 ## Naming
 
-CLI verb: **`igmt search`** (self-documenting). Engine module: **`concordance`** — the scholarly
+CLI verb: **`chandra search`** (self-documenting). Engine module: **`concordance`** — the scholarly
 term for an indexed listing of every occurrence of words in a corpus with their locations, which is
 exactly what this produces. Read-only by design (its report goes to stdout, never into the files) —
 which is why *not* `scribe`. Full rationale in the project `README.md`.

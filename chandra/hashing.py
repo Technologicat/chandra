@@ -74,7 +74,7 @@ class ResourceResolver:
 
 def cache_path() -> Path:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-    return Path(base) / "igmt" / "hashes.json"
+    return Path(base) / "chandra" / "hashes.json"
 
 
 class HashCache:

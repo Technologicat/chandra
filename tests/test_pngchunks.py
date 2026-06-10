@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from igmt import pngchunks as pc
+from chandra import pngchunks as pc
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 SAMPLE_NAME = "flux2-txt2img.png"

@@ -329,7 +329,7 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
 
 
 def format_recipe(recipe: Recipe) -> str:
-    """A readable multi-line dump of a Recipe, for `igmt rosetta --print`."""
+    """A readable multi-line dump of a Recipe, for `chandra rosetta --print`."""
     lines = []
     lines.append(f"positive: {recipe.positive!r}")
     lines.append(f"negative: {recipe.negative!r}")

@@ -1,4 +1,4 @@
-"""Tests for synthesis (Recipe → A1111 parameters string) and the `igmt inject` round-trip.
+"""Tests for synthesis (Recipe → A1111 parameters string) and the `chandra inject` round-trip.
 
 `a1111_parse` encodes the A1111 `parameters` format *contract* — the de-facto standard that SD Prompt
 Reader (`format/a1111.py`) and CivitAI both consume. It's the always-run acceptance gate: if our
@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from igmt import cli, pngchunks
-from igmt.analyze import Lora, Recipe
-from igmt.rosetta import extract_recipe
-from igmt.synthesize import synthesize
+from chandra import cli, pngchunks
+from chandra.analyze import Lora, Recipe
+from chandra.rosetta import extract_recipe
+from chandra.synthesize import synthesize
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 SAMPLES = sorted(SAMPLES_DIR.glob("*.png")) if SAMPLES_DIR.exists() else []
@@ -60,7 +60,7 @@ def test_synthesize_basic_roundtrips_through_sdpr_rules():
     assert neg == "blurry"
     assert sett == {
         "Steps": "20", "Sampler": "euler", "Schedule type": "normal", "CFG scale": "7",
-        "Seed": "42", "Size": "1024x768", "Model": "sd_xl", "Version": "igmt-rosetta 9.9",
+        "Seed": "42", "Size": "1024x768", "Model": "sd_xl", "Version": "chandra-rosetta 9.9",
     }
 
 
@@ -116,7 +116,7 @@ def test_sample_synthesis_parses_back(png):
     assert sett["Model"]                                # a model name is present
     assert "Steps" in sett
     for lora in recipe.loras:                            # each LoRA shows up as a <lora:...> tag
-        from igmt.synthesize import _basename_no_ext
+        from chandra.synthesize import _basename_no_ext
         assert f"<lora:{_basename_no_ext(lora.name)}:" in pos
 
 

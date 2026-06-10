@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from igmt import analyze
-from igmt.analyze import Recipe
-from igmt.rosetta import extract_recipe
+from chandra import analyze
+from chandra.analyze import Recipe
+from chandra.rosetta import extract_recipe
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 SAMPLES = sorted(SAMPLES_DIR.glob("*.png")) if SAMPLES_DIR.exists() else []

@@ -91,7 +91,7 @@ def synthesize(recipe, version: str = None) -> str:
     hashed = [(_basename_no_ext(lora.name), lora.hash) for lora in recipe.loras if lora.name and lora.hash]
     if hashed:
         settings.append('Lora hashes: "' + ", ".join(f"{name}: {h}" for name, h in hashed) + '"')
-    settings.append(f"Version: igmt-rosetta {version}")
+    settings.append(f"Version: chandra-rosetta {version}")
 
     if settings:
         parts.append(", ".join(settings))

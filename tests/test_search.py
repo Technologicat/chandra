@@ -1,11 +1,11 @@
-"""Tests for `igmt search` (the concordance engine)."""
+"""Tests for `chandra search` (the concordance engine)."""
 
 from pathlib import Path
 
 import pytest
 
-from igmt import cli, pngchunks
-from igmt.concordance import _contains, _matches, _split_a1111, extract_prompts
+from chandra import cli, pngchunks
+from chandra.concordance import _contains, _matches, _split_a1111, extract_prompts
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 

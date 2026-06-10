@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # PYTHON_ARGCOMPLETE_OK
-"""igmt — dispatcher for the imagegen-metadata-tools CLI toolbox.
+"""chandra — dispatcher for the imagegen-metadata-tools CLI toolbox.
 
 Routes subcommands to the individual tools:
 
-    igmt search ...   search prompts across a directory of images
-    igmt show ...     print the A1111/CivitAI metadata for a ComfyUI image (read-only)
-    igmt inject ...   write that metadata into the image(s)
+    chandra search ...   search prompts across a directory of images
+    chandra show ...     print the A1111/CivitAI metadata for a ComfyUI image (read-only)
+    chandra inject ...   write that metadata into the image(s)
 
 Each subtool module registers its subparser(s) (``add_subparser``) and sets an ``args.func`` handler,
 so the dispatcher only has to wire them up and route. (The modules keep the names ``rosetta`` —
@@ -28,18 +28,18 @@ from . import concordance, rosetta
 
 __all__ = ["build_parser", "main"]
 
-# Subtool modules; subcommands appear in `igmt --help` in this order (search, show, inject).
+# Subtool modules; subcommands appear in `chandra --help` in this order (search, show, inject).
 _SUBTOOLS = (concordance, rosetta)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Construct the top-level `igmt` parser with one subparser per subtool."""
+    """Construct the top-level `chandra` parser with one subparser per subtool."""
     parser = argparse.ArgumentParser(
-        prog="igmt",
+        prog="chandra",
         description="Tools for the metadata image generators embed in their output.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    # Not required: bare `igmt` prints the command list (see main) rather than erroring.
+    # Not required: bare `chandra` prints the command list (see main) rather than erroring.
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
     for tool in _SUBTOOLS:
         tool.add_subparser(subparsers)
@@ -47,10 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    """Entry point for the `igmt` console script.
+    """Entry point for the `chandra` console script.
 
     `argv` defaults to `sys.argv[1:]`; pass an explicit list to drive the dispatcher from tests.
-    Bare `igmt` (no subcommand) prints the help, which lists the available commands.
+    Bare `chandra` (no subcommand) prints the help, which lists the available commands.
     """
     parser = build_parser()
     if argcomplete is not None:

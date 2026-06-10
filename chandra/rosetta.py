@@ -1,4 +1,4 @@
-"""rosetta — the engine behind `igmt show` and `igmt inject`.
+"""rosetta — the engine behind `chandra show` and `chandra inject`.
 
 Walks the ComfyUI `prompt` graph embedded in a PNG, reconstructs the generation recipe, and renders
 an AUTOMATIC1111 / SD-Forge `parameters` string so that services which don't analyze ComfyUI graphs
@@ -6,8 +6,8 @@ an AUTOMATIC1111 / SD-Forge `parameters` string so that services which don't ana
 
 Two verbs, a deliberate read/write split (writing is never the default):
 
-- `igmt show`   — analyze and print (read-only); `--recipe` dumps the structured recipe instead.
-- `igmt inject` — write the synthesized `parameters` chunk into the PNG, in place.
+- `chandra show`   — analyze and print (read-only); `--recipe` dumps the structured recipe instead.
+- `chandra inject` — write the synthesized `parameters` chunk into the PNG, in place.
 
 The module keeps the name `rosetta` (it re-expresses one recipe in a script other tools read — see
 the README for the lineage); the CLI surface is the descriptive verbs.
@@ -90,11 +90,11 @@ def _hashing_context(args):
     if not getattr(args, "hash", False):
         return None
     dirs = list(args.models_dir or [])
-    env = os.environ.get("IGMT_MODELS_DIR")
+    env = os.environ.get("CHANDRA_MODELS_DIR")
     if env:
         dirs += [d for d in env.split(os.pathsep) if d]
     if not dirs:
-        print("igmt: --hash needs --models-dir (or $IGMT_MODELS_DIR); emitting names only.",
+        print("chandra: --hash needs --models-dir (or $CHANDRA_MODELS_DIR); emitting names only.",
               file=sys.stderr)
         return None
     return (_hashing.ResourceResolver(dirs), _hashing.HashCache())
@@ -138,10 +138,10 @@ def _process(args, write: bool) -> int:
 
 
 def run_show(args) -> int:
-    """`igmt show`: read → analyze → print (read-only)."""
+    """`chandra show`: read → analyze → print (read-only)."""
     return _process(args, write=False)
 
 
 def run_inject(args) -> int:
-    """`igmt inject`: read → analyze → synthesize → write the parameters chunk in place."""
+    """`chandra inject`: read → analyze → synthesize → write the parameters chunk in place."""
     return _process(args, write=True)

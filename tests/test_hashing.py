@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from igmt import cli, hashing
-from igmt.analyze import Lora, Recipe
-from igmt.synthesize import synthesize
+from chandra import cli, hashing
+from chandra.analyze import Lora, Recipe
+from chandra.synthesize import synthesize
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 
@@ -118,7 +118,7 @@ def qwen_sample():
 
 
 def test_cli_hash_emits_hashes(qwen_sample, tmp_path, capsys):
-    from igmt.rosetta import extract_recipe
+    from chandra.rosetta import extract_recipe
     recipe = extract_recipe(qwen_sample)
     models = tmp_path / "models"
     models.mkdir()

@@ -1,5 +1,5 @@
 [project]
-name = "imagegen-metadata-tools"
+name = "chandra"
 version = "0.1.0.dev0"
 description = "Tools for working with the metadata that image generators embed in their output."
 authors = [{ name = "Juha Jeronen", email = "juha.jeronen@jamk.fi" }]
@@ -31,24 +31,24 @@ classifiers = [
 ]
 dependencies = [
     "simpleeval>=0.9.13",   # sandboxed evaluation of Evaluate* node expressions (rosetta scalar resolver)
-    "argcomplete>=3.0",     # shell tab-completion for the igmt dispatcher
+    "argcomplete>=3.0",     # shell tab-completion for the chandra dispatcher
     "chardet>=5.0",         # defensive non-UTF-8 text decode (concordance)
     "colorama>=0.4.6",
 ]
 
 [project.urls]
-Homepage = "https://github.com/Technologicat/imagegen-metadata-tools"
-Repository = "https://github.com/Technologicat/imagegen-metadata-tools"
+Homepage = "https://github.com/Technologicat/chandra"
+Repository = "https://github.com/Technologicat/chandra"
 
 [project.scripts]
-igmt = "igmt.cli:main"
+chandra = "chandra.cli:main"
 
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 [tool.pdm.build]
-includes = ["igmt/"]
+includes = ["chandra/"]
 
 [dependency-groups]
 dev = [

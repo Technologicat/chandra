@@ -218,7 +218,7 @@ hang us).
 
 ## Resource hashing (CivitAI auto-linking) — optional *(implemented)*
 
-Decision: **name + settings always; hashing is opt-in.** Implemented in `igmt/hashing.py`.
+Decision: **name + settings always; hashing is opt-in.** Implemented in `chandra/hashing.py`.
 
 - Default: emit `Model:` and LoRA names as text. CivitAI shows them; it cannot auto-link without
   hashes.
@@ -230,8 +230,8 @@ Decision: **name + settings always; hashing is opt-in.** Implemented in `igmt/ha
     with `--hash` but no dir, we warn and emit names only. `ResourceResolver` indexes those dirs once
     (basename → paths) so resolving a graph name like `qwen/style/foo.safetensors` is a dict lookup,
     preferring a path whose tail matches the full relative name.
-  - A persistent **hash cache** (`HashCache`, JSON under `$XDG_CACHE_HOME/igmt/`, falling back to
-    the XDG default `~/.cache/igmt/` when the var is unset) keyed by (resolved path, size, mtime) —
+  - A persistent **hash cache** (`HashCache`, JSON under `$XDG_CACHE_HOME/chandra/`, falling back to
+    the XDG default `~/.cache/chandra/` when the var is unset) keyed by (resolved path, size, mtime) —
     multi-GB files shared across a batch are hashed once.
   - Graceful fallback: a file we can't locate → that resource stays name-only; we warn per file, we
     never fail the run.
@@ -262,10 +262,10 @@ if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, mod
 
 ## CLI design
 
-- **Two verbs, a read/write split.** `igmt show <png...>` analyzes and prints (the synthesized
-  `parameters` string, or the parsed `Recipe` with `--recipe`), writing nothing. `igmt inject
+- **Two verbs, a read/write split.** `chandra show <png...>` analyzes and prints (the synthesized
+  `parameters` string, or the parsed `Recipe` with `--recipe`), writing nothing. `chandra inject
   <png...>` writes the `parameters` chunk in place. Writing is its *own command*, never a side effect
-  of the read path — so a stray `igmt show .` can't mutate anything, and you opt into writing by
+  of the read path — so a stray `chandra show .` can't mutate anything, and you opt into writing by
   *typing* `inject`. (This replaced an earlier `rosetta [--inject]` flag model; the split makes the
   destructive action even more explicit. The engine module is still named `rosetta`.)
 - **`inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
@@ -375,30 +375,28 @@ summary** (positive/negative prompt + key settings) into a `Description` `tEXt`/
 Pure-Python PDM project (per the fleet's standard setup); developed on Python 3.14 with
 `requires-python >= 3.11`. It's an app (CLI), so it **commits `pdm.lock`**.
 
-**One dispatcher entry point: `igmt`.** A single console script with argparse subparsers routes to
-three descriptive verbs — `igmt search`, `igmt show`, `igmt inject`. One PATH entry no matter how
-many subcommands we add; `igmt --help` lists them; verbs are self-documenting (descriptive beats
+**One dispatcher entry point: `chandra`.** A single console script with argparse subparsers routes to
+three descriptive verbs — `chandra search`, `chandra show`, `chandra inject`. One PATH entry no matter how
+many subcommands we add; `chandra --help` lists them; verbs are self-documenting (descriptive beats
 evocative as subcommands — `git commit`, not `git rosetta`). The engine modules keep their layered
 names — `rosetta` powers `show`/`inject`, `concordance` powers `search` (lineage in the README).
 Each module registers its subparser(s) via `add_subparser` and sets an `args.func`; the dispatcher
-routes. Tools are unit-tested by driving the dispatcher: `cli.main(["show", ...])`. (Distribution
-name stays `imagegen-metadata-tools`; the *import* package is the short `igmt`, matching the
-command — the Pillow→`PIL` pattern. The `igmt` command name itself is a placeholder pending a
-pre-publish rename — see `TODO_DEFERRED.md`.)
+routes. Tools are unit-tested by driving the dispatcher: `cli.main(["show", ...])`. (Distribution,
+import package, and command are all `chandra` — naming lore in the README.)
 
 - **`rosetta`** (engine for `show` / `inject`) — the analyzer/injector (this brief's subject).
 - **`concordance`** (engine for `search`) — the prompt-search tool: a directory argument and
   fragment/exact search modes. See `briefs/concordance-search.md`.
 
-**Tab completion via `argcomplete`.** The `igmt` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
+**Tab completion via `argcomplete`.** The `chandra` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
 calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live
-parser (no static script to drift): `igmt <tab>` offers `search`/`show`/`inject` (and any future
-subcommand automatically), `igmt show --<tab>` lists its flags. A custom completer restricts file
+parser (no static script to drift): `chandra <tab>` offers `search`/`show`/`inject` (and any future
+subcommand automatically), `chandra show --<tab>` lists its flags. A custom completer restricts file
 arguments to `*.png`. Users enable it once, per-command, with
-`eval "$(register-python-argcomplete igmt)"` in their shell rc (bash/zsh). Note: the *global*
+`eval "$(register-python-argcomplete chandra)"` in their shell rc (bash/zsh). Note: the *global*
 `activate-global-python-argcomplete` hook keys off the `# PYTHON_ARGCOMPLETE_OK` marker, which the
 pip/pdm-generated console-script wrapper does **not** carry (the marker is in our `cli.py` source,
-not the wrapper) — so per-command registration is the reliable path for the installed `igmt`. The
+not the wrapper) — so per-command registration is the reliable path for the installed `chandra`. The
 `register-python-argcomplete` helper ships with argcomplete (in the venv; `pipx install argcomplete`
 to have it on PATH globally).
 
@@ -412,7 +410,7 @@ distribution ships both tools and the README. Lint/style/CI per the fleet conven
 
 ## Naming
 
-The CLI surface is three descriptive verbs: **`igmt search`**, **`igmt show`**, **`igmt inject`**
+The CLI surface is three descriptive verbs: **`chandra search`**, **`chandra show`**, **`chandra inject`**
 (descriptive beats evocative for subcommands). The layered names live on as the *engine* modules:
 **`rosetta`** (behind `show`/`inject`) and **`concordance`** (behind `search`, its own brief:
 `briefs/concordance-search.md`). The full human-facing rationale — the Rosetta Stone, the deadpan
@@ -421,5 +419,5 @@ where a reader will look for it. In short: `rosetta` makes a workflow legible to
 message, many scripts); `concordance` indexes and searches the text inscribed across a corpus of
 images, and is read-only by design (hence *not* `scribe`).
 
-The toolkit/command name `igmt` (the project's initials) is a placeholder pending a pre-publish
-evocative rename (see `TODO_DEFERRED.md`). Distribution name `imagegen-metadata-tools` stays.
+The toolkit, command, import package, and distribution are all named `chandra` (naming lore in the
+README).
