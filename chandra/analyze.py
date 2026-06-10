@@ -26,7 +26,7 @@ try:
 except ImportError:  # resolver degrades gracefully without it
     simple_eval = None
 
-__all__ = ["Lora", "Recipe", "analyze", "format_recipe"]
+__all__ = ["Lora", "Recipe", "analyze", "format_recipe", "format_description"]
 
 _MAX_DEPTH = 64  # guard against cycles/pathological graphs (the graph is a DAG, but a file may lie)
 
@@ -329,7 +329,7 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
 
 
 def format_recipe(recipe: Recipe) -> str:
-    """A readable multi-line dump of a Recipe, for `chandra rosetta --print`."""
+    """A readable multi-line dump of a Recipe, for `chandra show --recipe`."""
     lines = []
     lines.append(f"positive: {recipe.positive!r}")
     lines.append(f"negative: {recipe.negative!r}")
@@ -348,4 +348,33 @@ def format_recipe(recipe: Recipe) -> str:
                  f"seed: {recipe.seed}")
     for w in recipe.warnings:
         lines.append(f"  ! {w}")
+    return "\n".join(lines)
+
+
+def format_description(recipe: Recipe) -> str:
+    """A clean, human-readable rendering of a Recipe, for embedding as an image description.
+
+    Unlike `format_recipe` (which uses `repr()` for exact, terminal-debugging fidelity), this keeps
+    the prompts as real text with real line breaks — so it reads naturally as the "Description"
+    caption a general image viewer (Pix, etc.) shows. Empty sections (no negative, no VAE, no LoRAs)
+    are omitted rather than shown blank.
+    """
+    lines = ["Positive:", recipe.positive]
+    if recipe.negative:
+        lines += ["", "Negative:", recipe.negative]
+    lines.append("")
+    if recipe.width and recipe.height:
+        lines.append(f"Size:     {recipe.width}x{recipe.height}")
+    model_hash = f"  [{recipe.model_hash}]" if recipe.model_hash else ""
+    lines.append(f"Model:    {recipe.model}{model_hash}")
+    for lora in recipe.loras:
+        lora_hash = f"  [{lora.hash}]" if lora.hash else ""
+        lines.append(f"LoRA:     {lora.name} (strength {lora.strength}){lora_hash}")
+    if recipe.vae:
+        lines.append(f"VAE:      {recipe.vae}")
+    lines.append(f"Sampler:  {recipe.sampler_name} / {recipe.scheduler}")
+    lines.append(f"Steps: {recipe.steps}  CFG: {recipe.cfg}  Denoise: {recipe.denoise}  "
+                 f"Seed: {recipe.seed}")
+    for w in recipe.warnings:
+        lines.append(f"! {w}")
     return "\n".join(lines)

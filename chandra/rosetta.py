@@ -22,6 +22,7 @@ from . import hashing as _hashing
 from . import inputs as _inputs
 from . import pngchunks
 from . import synthesize as _synthesize
+from . import xmp as _xmp
 
 __all__ = ["add_subparser", "run_show", "run_inject", "extract_recipe"]
 
@@ -59,8 +60,13 @@ def add_subparser(subparsers):
 
     inject = subparsers.add_parser(
         "inject", help="write A1111/CivitAI metadata into the PNG(s)",
-        description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place.")
+        description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place. "
+                    "Also embeds the recipe as an XMP description, so general image viewers (Pix, etc.) "
+                    "show it too.")
     _add_paths_arg(inject)
+    inject.add_argument("--no-xmp", action="store_true",
+                        help="skip the XMP description for general viewers (write only the SD-tool "
+                             "`parameters` chunk)")
     inject.set_defaults(func=run_inject, parser=inject)
 
 
@@ -121,8 +127,13 @@ def _process(args, write: bool) -> int:
                 print(f"{path}: {warning}", file=sys.stderr)
         params = _synthesize.synthesize(recipe)
         if write:
+            # Two coexisting layers: the `parameters` chunk for the SD tools, and (unless --no-xmp)
+            # an XMP `dc:description` carrying the human-readable recipe for general image viewers.
+            out_chunks = pngchunks.set_text_field(chunks, "parameters", params)
+            if not getattr(args, "no_xmp", False):
+                out_chunks = pngchunks.set_xmp(out_chunks, _xmp.build(_analyze.format_description(recipe)))
             try:
-                pngchunks.write_file(path, pngchunks.set_text_field(chunks, "parameters", params))
+                pngchunks.write_file(path, out_chunks)
             except Exception as e:
                 print(f"{path}: ERROR writing: {e}", file=sys.stderr)
                 status = 1

@@ -180,3 +180,34 @@ def test_inpaint_stitch_sample_resolves():
     r = _recipe("qwen2512-inpaint.png")
     assert r.model and r.sampler_name == "dpmpp_2m"
     assert "in-paint" in r.positive
+
+
+# --------------------------------------------------------------------------------
+# format_description (clean rendering for the embedded XMP description)
+
+def test_format_description_is_clean_text_not_repr():
+    r = Recipe(positive="a catgirl\nmasterpiece", negative="blurry", seed=1, steps=20, cfg=4.0,
+               sampler_name="euler", scheduler="normal", denoise=1.0, model="m.gguf", width=8, height=8)
+    out = analyze.format_description(r)
+    assert "Positive:\na catgirl\nmasterpiece" in out  # real newlines, no repr quoting
+    assert "'a catgirl" not in out and "\\n" not in out  # not repr()-style
+    assert "Negative:\nblurry" in out
+    assert "Size:     8x8" in out and "Model:    m.gguf" in out
+
+
+def test_format_description_omits_empty_sections():
+    r = Recipe(positive="x", negative="", seed=1, steps=4, sampler_name="euler",
+               scheduler="normal", model="m", width=8, height=8)
+    out = analyze.format_description(r)
+    assert "Negative:" not in out  # empty negative is omitted, not shown blank
+    assert "VAE:" not in out and "LoRA:" not in out
+
+
+def test_format_description_includes_loras_and_vae():
+    from chandra.analyze import Lora
+    r = Recipe(positive="x", seed=1, steps=4, sampler_name="euler", scheduler="normal", model="m",
+               vae="ae.safetensors", loras=[Lora(name="style.safetensors", strength=0.8)],
+               width=8, height=8)
+    out = analyze.format_description(r)
+    assert "LoRA:     style.safetensors (strength 0.8)" in out
+    assert "VAE:      ae.safetensors" in out

@@ -188,6 +188,37 @@ def test_remove_text_fields():
 
 
 # --------------------------------------------------------------------------------
+# set_xmp: XMP packet carried in an uncompressed iTXt chunk
+
+def test_set_xmp_inserts_uncompressed_itxt_before_iend():
+    out = pc.set_xmp(_minimal_chunks(), "<x:xmpmeta/>")
+    assert [c.type for c in out][-2:] == [b"iTXt", b"IEND"]   # iTXt, just before IEND
+    xmp_chunk = next(c for c in out if pc.keyword_of(c) == pc.XMP_KEYWORD)
+    # iTXt layout: keyword \0 cflag method ... ; cflag must be 0 (uncompressed) for XMP-in-PNG.
+    after_kw = xmp_chunk.data.split(b"\x00", 1)[1]
+    assert after_kw[0] == 0  # compression flag off
+    assert pc.decode_text_chunk(xmp_chunk) == (pc.XMP_KEYWORD, "<x:xmpmeta/>")
+
+
+def test_set_xmp_is_idempotent():
+    out = pc.set_xmp(_minimal_chunks(), "<a/>")
+    out = pc.set_xmp(out, "<b/>")
+    xmps = [c for c in out if pc.keyword_of(c) == pc.XMP_KEYWORD]
+    assert len(xmps) == 1                              # never stacked
+    assert pc.get_text_field(out, pc.XMP_KEYWORD) == "<b/>"
+
+
+def test_set_xmp_and_parameters_coexist(sample_chunks):
+    """The SD-tool `parameters` chunk and the viewer XMP description are independent layers."""
+    out = pc.set_text_field(sample_chunks, "parameters", "Steps: 4")
+    out = pc.set_xmp(out, "<x:xmpmeta>desc</x:xmpmeta>")
+    fields = pc.text_fields(out)
+    assert fields["parameters"] == "Steps: 4"
+    assert fields[pc.XMP_KEYWORD] == "<x:xmpmeta>desc</x:xmpmeta>"
+    assert fields["prompt"] == pc.text_fields(sample_chunks)["prompt"]  # ComfyUI chunks untouched
+
+
+# --------------------------------------------------------------------------------
 # CRC correctness on real data, via pngcheck
 
 @pytest.mark.skipif(shutil.which("pngcheck") is None, reason="pngcheck not installed")

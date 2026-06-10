@@ -44,9 +44,16 @@ __all__ = [
     "make_text_chunk",
     "set_text_field",
     "remove_text_fields",
+    "XMP_KEYWORD",
+    "make_xmp_chunk",
+    "set_xmp",
 ]
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+# The PNG keyword under which an XMP packet lives, in an (uncompressed) iTXt chunk — the standard
+# XMP-in-PNG location that exiv2/gThumb/Pix and other XMP readers look for.
+XMP_KEYWORD = "XML:com.adobe.xmp"
 
 # The three textual chunk types, treated uniformly for keyword extraction and replacement.
 TEXT_CHUNK_TYPES = (b"tEXt", b"zTXt", b"iTXt")
@@ -220,6 +227,18 @@ def remove_text_fields(chunks, keyword: str) -> list[Chunk]:
     return [c for c in chunks if keyword_of(c) != keyword]
 
 
+def _insert_before_iend(chunks, new_chunk: Chunk) -> list[Chunk]:
+    """Return `chunks` with `new_chunk` spliced in just before `IEND` (a valid spot for ancillary
+    chunks). If there is no `IEND` (malformed input), append rather than lose the chunk."""
+    result = list(chunks)
+    for i, c in enumerate(result):
+        if c.type == b"IEND":
+            result.insert(i, new_chunk)
+            return result
+    result.append(new_chunk)
+    return result
+
+
 def set_text_field(chunks, keyword: str, text: str) -> list[Chunk]:
     """Return `chunks` with exactly one text chunk for `keyword`, holding `text`.
 
@@ -227,12 +246,20 @@ def set_text_field(chunks, keyword: str, text: str) -> list[Chunk]:
     re-running is idempotent — we never stack a second `parameters`. The new chunk is inserted
     immediately before `IEND` (a valid position for ancillary text chunks).
     """
-    result = remove_text_fields(chunks, keyword)
-    new_chunk = make_text_chunk(keyword, text)
-    for i, c in enumerate(result):
-        if c.type == b"IEND":
-            result.insert(i, new_chunk)
-            return result
-    # No IEND (malformed input): append rather than lose the field.
-    result.append(new_chunk)
-    return result
+    return _insert_before_iend(remove_text_fields(chunks, keyword), make_text_chunk(keyword, text))
+
+
+def make_xmp_chunk(packet: str) -> Chunk:
+    """An uncompressed `iTXt` chunk carrying an XMP `packet` under the `XML:com.adobe.xmp` keyword.
+
+    XMP-in-PNG must live in an *uncompressed* iTXt chunk (cflag=0), so this is built directly rather
+    than via `make_text_chunk` (which would emit `tEXt` for ASCII content). Layout:
+    `keyword \\x00 cflag(0) method(0) lang \\x00 transkw \\x00 text(UTF-8)`.
+    """
+    kw = XMP_KEYWORD.encode("latin-1")
+    return Chunk(b"iTXt", kw + b"\x00" + b"\x00\x00" + b"\x00" + b"\x00" + packet.encode("utf-8"))
+
+
+def set_xmp(chunks, packet: str) -> list[Chunk]:
+    """Return `chunks` with exactly one XMP iTXt chunk holding `packet` (idempotent re-write)."""
+    return _insert_before_iend(remove_text_fields(chunks, XMP_KEYWORD), make_xmp_chunk(packet))

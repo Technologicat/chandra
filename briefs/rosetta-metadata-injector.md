@@ -385,23 +385,26 @@ exiv2 serializes those into the standard PNG carrier chunks — XMP into an `iTX
 exiv2 ≥ 0.27.3). So the route that makes our text appear in Pix is **XMP `dc:description`** (with
 IPTC `Caption` as a belt-and-braces second target), *not* a plain `Description` text chunk.
 
-Implementation fits chandra's existing model: we already do lossless PNG chunk surgery, so we emit a
-minimal valid XMP packet carrying `dc:description` (and optionally `dc:title`, `dc:subject` for
-tags) and insert it as the `XML:com.adobe.xmp` `iTXt` chunk — no libexiv2 runtime dependency. The
-same chunk is what SD Prompt Reader-style tools ignore and general viewers honour, so the two
-metadata layers (`parameters` for SD tools, XMP for viewers) coexist cleanly.
+**Implemented.** It fits chandra's existing model: we already do lossless PNG chunk surgery, so we
+emit a minimal valid XMP packet carrying `dc:description` (`chandra/xmp.py`) and splice it in as the
+`XML:com.adobe.xmp` `iTXt` chunk (`pngchunks.set_xmp`) — no libexiv2 runtime dependency. `inject`
+writes it by default, alongside the `parameters` chunk; `--no-xmp` opts out. The same chunk is what
+SD Prompt Reader-style tools ignore and general viewers honour, so the two metadata layers
+(`parameters` for SD tools, XMP for viewers) coexist cleanly. pngcheck confirms the chunk and a
+clean file.
+
+The description text is a **clean rendering of the full recipe** (`analyze.format_description`):
+the same information as `chandra show --recipe`, but with real line breaks and no `repr()` quoting,
+so it reads naturally as a viewer caption (the terminal `--recipe` view keeps its `repr()` fidelity).
+We deliberately write XMP only (not a sidecar): sidecars are easily lost when files are moved, and an
+embedded chunk travels with the image.
 
 > **Empirical step still owed:** confirm that a *hand-written* XMP `iTXt` packet (ours, not exiv2's)
 > is parsed by the installed Pix — open an injected output in Pix and check the Description caption
 > shows. The contract above is grounded in the Pix/gThumb source (`extensions/exiv2_tools/`,
-> `extensions/comments/`); what remains is verifying our serialization is byte-compatible with what
-> libexiv2 expects to read. The user has Pix installed and is the natural verifier.
-
-> **Sidecar alternative (no file modification).** Pix also reads/writes legacy gThumb
-> `.comments/<name>.png.xml` sidecars (gzip-compressed XML, `<comment version="3.0">` with `<note>`
-> → Description, `<caption>` → Title, `<categories>` → tags). Writing those would surface the prompt
-> in Pix *without touching the image bytes at all* — a possible `--sidecar`-style mode, orthogonal to
-> embedded XMP. Noted as an option, not a commitment.
+> `extensions/comments/`) and pngcheck recognizes the chunk; what remains is verifying our
+> serialization is byte-compatible with what libexiv2 expects to read. The user has Pix installed and
+> is the natural verifier.
 
 ## Project shape
 

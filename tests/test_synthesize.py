@@ -155,6 +155,35 @@ def test_inject_is_idempotent(a_sample, tmp_path):
     assert len(params) == 1
 
 
+def test_inject_writes_xmp_description_by_default(a_sample, tmp_path):
+    import xml.etree.ElementTree as ET
+    from chandra.analyze import format_description
+    dst = tmp_path / "img.png"
+    shutil.copy(a_sample, dst)
+
+    assert cli.main(["inject", str(dst)]) == 0
+
+    chunks = pngchunks.parse_file(dst)
+    packet = pngchunks.text_fields(chunks)[pngchunks.XMP_KEYWORD]
+    body = packet[packet.index("<x:xmpmeta"): packet.index("</x:xmpmeta>") + len("</x:xmpmeta>")]
+    ns = {"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "dc": "http://purl.org/dc/elements/1.1/"}
+    desc = ET.fromstring(body).find(".//dc:description/rdf:Alt/rdf:li", ns).text
+    assert desc == format_description(extract_recipe(dst))  # the clean recipe rendering, verbatim
+    # Idempotent: a second inject leaves exactly one XMP chunk.
+    cli.main(["inject", str(dst)])
+    xmps = [c for c in pngchunks.parse_file(dst) if pngchunks.keyword_of(c) == pngchunks.XMP_KEYWORD]
+    assert len(xmps) == 1
+
+
+def test_inject_no_xmp_skips_the_description(a_sample, tmp_path):
+    dst = tmp_path / "img.png"
+    shutil.copy(a_sample, dst)
+    assert cli.main(["inject", "--no-xmp", str(dst)]) == 0
+    fields = pngchunks.text_fields(pngchunks.parse_file(dst))
+    assert "parameters" in fields                        # the SD-tool layer is still written
+    assert pngchunks.XMP_KEYWORD not in fields           # but the viewer XMP layer is skipped
+
+
 @pytest.mark.skipif(shutil.which("pngcheck") is None, reason="pngcheck not installed")
 def test_injected_file_is_pngcheck_clean(a_sample, tmp_path):
     dst = tmp_path / "img.png"

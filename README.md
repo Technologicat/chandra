@@ -36,6 +36,16 @@ a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, 
 non-standard loaders are not. `chandra` walks the embedded ComfyUI graph itself, reconstructs the
 recipe, and re-expresses it in the one format those tools read robustly.
 
+## Seeing the recipe in a general image viewer
+
+`inject` also embeds a clean, human-readable rendering of the recipe — the same information as
+`chandra show --recipe` — as an XMP `dc:description`. So a general image viewer that reads standard
+metadata (e.g. [Pix](https://github.com/linuxmint/pix), the Linux Mint viewer) shows the prompt and
+settings in its **Description** caption, no SD software needed — often enough to skip opening a
+dedicated prompt reader just to glance at what made an image. This is on by default; pass `--no-xmp`
+to write only the machine-oriented `parameters` chunk. The two layers are independent and both
+lossless — the original ComfyUI `prompt`/`workflow` chunks are never touched.
+
 ## Searching
 
 `chandra search` builds boolean queries from three primitives — no special syntax or metacharacters:
