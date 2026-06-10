@@ -42,9 +42,14 @@ def _num(x) -> str:
 
 
 def _steps(x) -> str:
-    """Steps is an integer count; the Forge dynamic-steps Evaluate chain can yield a fraction
-    (e.g. 0.7 * 8 = 5.6), so round to the nearest whole step for the integer-valued field."""
-    return str(int(round(float(x))))
+    """Steps is an integer count, but a dynamic-steps math chain can yield a fraction: an Evaluate
+    node computing e.g. 0.7 * 8 exposes the result on a typed INT output that applies `int()`
+    (truncation toward zero), so 5.6 reaches the sampler as 5. We resolve the arithmetic (5.6) but
+    not that per-output `int()`, so truncate here rather than round: the truncated value matches the
+    step count that actually ran. Rounding would embed 6 — a count nothing ran. Whatever integer we
+    embed is what CivitAI displays verbatim, so embedding the truncated value is what makes the
+    report correct."""
+    return str(int(float(x)))
 
 
 def synthesize(recipe, version: str = None) -> str:

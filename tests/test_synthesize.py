@@ -95,7 +95,7 @@ def test_cfg_and_steps_formatting():
     s = synthesize(Recipe(positive="x", steps=5.6, cfg=4.5, sampler_name="euler", seed=1,
                           model="m.gguf", width=8, height=8))
     _, _, sett = a1111_parse(s)
-    assert sett["Steps"] == "6"        # 5.6 -> nearest whole step
+    assert sett["Steps"] == "5"        # 5.6 -> 5: truncated like ComfyUI's FLOAT->INT coercion (what ran)
     assert sett["CFG scale"] == "4.5"  # real fraction kept
 
 
