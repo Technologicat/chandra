@@ -50,20 +50,26 @@ In the surviving `prompt` graph:
   sampler falls back to `scrubbed prompt (node <id>)`. (The two paths share only the ComfyUI
   convention that the sampler inputs are *named* `positive`/`negative`; beyond that they differ.)
 - **User file references → `scrubbed`.** SaveImage `filename_prefix`, LoadImage `image`.
-- **Kept:** the link wiring, model/LoRA/VAE filenames (public, and the parser resolves them),
-  sampler/scheduler tokens, and all numeric settings.
+- **Checkpoint / LoRA names → `scrubbed-checkpoint` / `scrubbed-lora`.** A user-chosen weight's *name*
+  can itself be NSFW or identifying (a niche concept LoRA, the reporter's own upload), so the names go
+  — but the LoRA count, order, and strengths are kept, so the chain structure is intact.
+- **Kept:** the link wiring, VAE / CLIP / text-encoder names (public infrastructure, useful context,
+  never identifying), sampler/scheduler tokens, and all numeric settings.
 
 ## Neutralization rule
 
-Two targeted sets plus a safety net, applied per input value (strings only — links are
+Targeted key sets plus a safety net, applied per input value (strings only — links are
 `[node, slot]` lists, numbers/bools aren't text):
 
+- known user-path keys (`filename_prefix`, `image`) → `scrubbed`;
+- any key containing `lora` → `scrubbed-lora`;
+- the base-loader name fields (`ckpt_name` / `gguf_name` / `unet_name` / `model_path`, via
+  `analyze._is_base_loader_field`, reused so the two stay in sync) → `scrubbed-checkpoint`;
 - known prompt keys (`text`, `prompt`, `positive`, `negative`, `string`, SDXL `text_g`/`text_l`, …)
   → role-tagged placeholder;
-- known user-path keys (`filename_prefix`, `image`) → `scrubbed`;
 - **safety net:** any remaining string ≥ 40 chars that isn't filename-like (no path separator, no
   extension) → placeholder. Catches prompts stashed under a custom node's unexpected input name,
-  while leaving model filenames (which have extensions) and short tokens alone.
+  while leaving the kept filenames (which have extensions) and short tokens alone.
 
 It's conservative, not a formal guarantee — a custom node could hide text somewhere the heuristic
 misses. The verb's output is reviewable with `chandra show`, and `CONTRIBUTING.md` tells reporters to

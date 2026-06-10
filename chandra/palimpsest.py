@@ -23,10 +23,14 @@ What it does to a PNG:
   muted / bypassed nodes, *and* a second copy of the prompt text in its widget values — the executable
   `prompt` graph has none of these), and any injected `parameters` / XMP description;
 - neutralizes free-text in the `prompt` graph — prompt strings become ``scrubbed positive prompt`` /
-  ``scrubbed negative prompt`` (a readability label, traced from the sampler's conditioning links;
-  texts not reachable from a sampler fall back to ``scrubbed prompt (node <id>)``), and user file
-  references (SaveImage prefix, LoadImage path) become ``scrubbed``;
-- keeps the wiring and the (public) model / LoRA filenames the parser resolves.
+  ``scrubbed negative prompt`` (a readability label; the role comes from `analyze.conditioning_roles`,
+  the same node-level traversal the recipe parser uses, so inpaint and passthrough cases resolve
+  correctly; a text node off the sampler's conditioning path falls back to ``scrubbed prompt
+  (node <id>)``), and user file references (SaveImage prefix, LoadImage path) become ``scrubbed``;
+- replaces checkpoint and LoRA names with ``scrubbed-checkpoint`` / ``scrubbed-lora`` — a user-chosen
+  weight's name can itself be NSFW or identifying (a niche concept LoRA, the reporter's own upload);
+- keeps the wiring, the LoRA count / order / strengths, and the VAE / CLIP / text-encoder names
+  (public infrastructure, useful context, never identifying).
 
 The neutralization is conservative — keyed on input names plus a long-free-text safety net — but not a
 formal guarantee; a custom node could stash text under an unexpected key. Review a scrubbed file with
@@ -39,6 +43,7 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
+from . import analyze as _analyze
 from . import inputs as _inputs
 from . import pngchunks
 
@@ -75,53 +80,18 @@ def _is_prompt_field(key: str, value) -> bool:
     return isinstance(value, str) and (key in _PROMPT_KEYS or _is_freetext(value))
 
 
-def _role_map(graph: dict) -> dict:
-    """Map each text-bearing node id to ``"positive"`` / ``"negative"`` (or ``None`` if both/ambiguous).
-
-    The role is read by tracing a sampler's ``positive`` / ``negative`` conditioning inputs back
-    through the link graph to the text nodes that feed them. This is deliberately *independent* of the
-    recipe parser (`analyze`): the tag reflects what the graph wiring says, so if the parser later
-    disagrees about which prompt is which, a scrubbed example surfaces the discrepancy.
-    """
-    pos, neg = set(), set()
-
-    def collect(start, bucket):
-        seen, stack = set(), []
-        if isinstance(start, list) and start and isinstance(start[0], str):
-            stack.append(start[0])
-        while stack:
-            nid = stack.pop()
-            if nid in seen:
-                continue
-            seen.add(nid)
-            ins = graph.get(nid, {}).get("inputs") if isinstance(graph.get(nid), dict) else None
-            if not isinstance(ins, dict):
-                continue
-            if any(_is_prompt_field(k, v) for k, v in ins.items()):
-                bucket.add(nid)
-            for v in ins.values():  # walk back through input links to reach the text nodes
-                if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str):
-                    stack.append(v[0])
-
-    for node in graph.values():
-        ins = node.get("inputs") if isinstance(node, dict) else None
-        if isinstance(ins, dict):
-            collect(ins.get("positive"), pos)
-            collect(ins.get("negative"), neg)
-
-    return {nid: (None if nid in pos and nid in neg else ("positive" if nid in pos else "negative"))
-            for nid in pos | neg}
-
-
 def scrub_graph(graph: dict) -> tuple[dict, int]:
     """Neutralize identifying free-text in a ComfyUI `prompt` graph, in place. Returns (graph, count).
 
-    Prompt strings become ``scrubbed positive prompt`` / ``scrubbed negative prompt`` (role traced
-    from the sampler links; texts not reachable from a sampler fall back to a per-node placeholder),
-    and user file references become ``scrubbed``. Model/LoRA names, samplers, numbers, and the link
-    wiring are left untouched. `count` is the number of prompt fields neutralized.
+    Prompt strings become ``scrubbed positive prompt`` / ``scrubbed negative prompt`` — the role comes
+    from `analyze.conditioning_roles` (the same traversal the recipe parser uses, so the label matches
+    how the prompt is read, and the inpaint/passthrough cases resolve correctly). A text node not on a
+    sampler's conditioning path falls back to ``scrubbed prompt (node <id>)``. User file references
+    become ``scrubbed``; checkpoint and LoRA names become ``scrubbed-checkpoint`` / ``scrubbed-lora``
+    (a user-chosen weight's name can be NSFW or identifying). VAE / CLIP names, samplers, numbers, and
+    the wiring are left untouched. `count` is the number of prompt fields neutralized.
     """
-    roles = _role_map(graph)
+    roles = _analyze.conditioning_roles(graph)
     count = 0
     for nid, node in graph.items():
         node_inputs = node.get("inputs") if isinstance(node, dict) else None
@@ -132,6 +102,13 @@ def scrub_graph(graph: dict) -> tuple[dict, int]:
                 continue  # links are [node, slot] lists; numbers/bools aren't text
             if key in _PATH_KEYS:
                 node_inputs[key] = "scrubbed"
+            elif "lora" in key.lower():
+                node_inputs[key] = "scrubbed-lora"
+            elif _analyze._is_base_loader_field(key):
+                # Checkpoint / UNet / diffusion-model names. Scrubbed with LoRA names because a
+                # user-chosen weight's *name* can be NSFW or identifying; reused from `analyze` so the
+                # two stay in sync. VAE / CLIP / text-encoder names are kept (public infrastructure).
+                node_inputs[key] = "scrubbed-checkpoint"
             elif _is_prompt_field(key, value):
                 role = roles.get(nid)
                 node_inputs[key] = f"scrubbed {role} prompt" if role else f"scrubbed prompt (node {nid})"
@@ -230,5 +207,5 @@ def run(args) -> int:
             status = 1
             continue
         removed = ", ".join(report.dropped) if report.dropped else "nothing"
-        print(f"scrubbed → {out_path}  (removed {removed}; neutralized {report.neutralized} text field(s))")
+        print(f"scrubbed → {out_path}  (removed {removed}; neutralized {report.neutralized} prompt(s))")
     return status

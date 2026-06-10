@@ -37,10 +37,12 @@ def test_fixture_is_a_scrubbed_skeleton(path):
     fields = pngchunks.text_fields(chunks)
     assert "workflow" not in fields                     # no UI graph / notes / prompt copy
     assert "parameters" not in fields                   # not pre-injected
-    # Every prompt in the skeleton is a placeholder, never leftover prose.
+    # Every prompt in the skeleton is a placeholder, never leftover prose; weights are anonymized.
     recipe = extract_recipe(path)
     for prompt in (recipe.positive or "", recipe.negative or ""):
         assert prompt == "" or prompt.startswith("scrubbed ")
+    assert recipe.model == "scrubbed-checkpoint"        # checkpoint name scrubbed
+    assert all(lo.name == "scrubbed-lora" for lo in recipe.loras)  # LoRA names scrubbed
 
 
 # --------------------------------------------------------------------------------
@@ -66,14 +68,15 @@ def _recipe(name):
 
 def test_multi_lora_chain_structure():
     r = _recipe("qwen2512-txt2img.png")
-    assert len(r.loras) == 2
-    names = " ".join(lo.name for lo in r.loras)
-    assert "Lightning" in names and "illustria" in names
+    assert len(r.loras) == 2                             # chain length survives (names are scrubbed)
+    assert all(lo.name == "scrubbed-lora" for lo in r.loras)
+    assert all(lo.strength is not None for lo in r.loras)  # strengths preserved
 
 
 def test_qwen_edit_model_resolves():
+    # The model-name *field* still resolves (to the scrubbed placeholder) — exercises the loader walk.
     r = _recipe("qwen-edit-2511-basic.png")
-    assert "qwen-image-edit" in r.model
+    assert r.model == "scrubbed-checkpoint"
 
 
 def test_inpaint_stitch_resolves():

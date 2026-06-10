@@ -26,7 +26,7 @@ try:
 except ImportError:  # resolver degrades gracefully without it
     simple_eval = None
 
-__all__ = ["Lora", "Recipe", "analyze", "format_recipe", "format_description"]
+__all__ = ["Lora", "Recipe", "analyze", "conditioning_roles", "format_recipe", "format_description"]
 
 _MAX_DEPTH = 64  # guard against cycles/pathological graphs (the graph is a DAG, but a file may lie)
 
@@ -211,8 +211,8 @@ def _find_sampler(graph, sink_id, warnings):
     return None
 
 
-def _trace_conditioning(graph, ref, depth=0):
-    """Follow a conditioning link back to a text encoder; return the prompt text or None.
+def _trace_conditioning_node(graph, ref, depth=0):
+    """Follow a conditioning link back to the text-encoder node; return its node id (or None).
 
     Handles direct encoders (`text`/`prompt`), single-conditioning passthroughs (`ReferenceLatent`,
     …), and dual-output passthroughs (`InpaintModelConditioning`, `ControlNetApplyAdvanced`) where
@@ -226,16 +226,43 @@ def _trace_conditioning(graph, ref, depth=0):
         return None
     ins = _inputs(node)
 
-    if "text" in ins:
-        return _resolve_string(graph, ins["text"], depth + 1)
-    if "prompt" in ins:
-        return _resolve_string(graph, ins["prompt"], depth + 1)
+    if "text" in ins or "prompt" in ins:
+        return nid
     if "positive" in ins and "negative" in ins:
         branch = "positive" if slot == 0 else "negative"
-        return _trace_conditioning(graph, ins.get(branch), depth + 1)
+        return _trace_conditioning_node(graph, ins.get(branch), depth + 1)
     if "conditioning" in ins:
-        return _trace_conditioning(graph, ins["conditioning"], depth + 1)
+        return _trace_conditioning_node(graph, ins["conditioning"], depth + 1)
     return None
+
+
+def _trace_conditioning(graph, ref, depth=0):
+    """Follow a conditioning link back to a text encoder; return the prompt text or None."""
+    nid = _trace_conditioning_node(graph, ref, depth)
+    if nid is None:
+        return None
+    ins = _inputs(graph[nid])
+    return _resolve_string(graph, ins["text"] if "text" in ins else ins["prompt"], depth + 1)
+
+
+def conditioning_roles(graph: dict) -> dict:
+    """Map text-encoder node id → ``"positive"`` / ``"negative"``, as the parser resolves the sampler.
+
+    Exposes *which node* supplies each prompt (the same traversal `analyze` uses to read the text), so
+    `palimpsest` can label scrubbed prompts the way the parser reads them — by graph position, which is
+    unambiguous even when the positive and negative text happen to be identical or empty. Returns an
+    empty map when there's no resolvable sampler.
+    """
+    sink = _pick_sink(graph, [])
+    sampler = _find_sampler(graph, sink, []) if sink is not None else None
+    if sampler is None:
+        return {}
+    ins = _inputs(graph[sampler])
+    pos = _trace_conditioning_node(graph, ins.get("positive"))
+    neg = _trace_conditioning_node(graph, ins.get("negative"))
+    if pos is not None and pos == neg:  # one node feeding both — ambiguous, don't guess
+        return {}
+    return {nid: role for nid, role in ((pos, "positive"), (neg, "negative")) if nid is not None}
 
 
 def _walk_model(graph, ref):

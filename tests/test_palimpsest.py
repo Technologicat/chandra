@@ -49,9 +49,9 @@ def _png_chunks(graph):
 def test_neutralizes_prompt_text_but_keeps_structure():
     graph, n = palimpsest.scrub_graph(_graph())
     assert n == 2
-    assert graph["6"]["inputs"]["text"] == "scrubbed positive prompt"   # role traced from sampler link
+    assert graph["6"]["inputs"]["text"] == "scrubbed positive prompt"   # role via analyze.conditioning_roles
     assert graph["7"]["inputs"]["text"] == "scrubbed negative prompt"
-    assert graph["4"]["inputs"]["ckpt_name"] == "models/SomeModel-Q4.gguf"  # model name kept
+    assert graph["4"]["inputs"]["ckpt_name"] == "scrubbed-checkpoint"   # checkpoint name scrubbed
     assert graph["3"]["inputs"]["sampler_name"] == "dpmpp_2m"            # short tokens kept
     assert graph["3"]["inputs"]["positive"] == ["6", 0]                  # link wiring kept
     assert graph["3"]["inputs"]["seed"] == 42                            # numbers kept
@@ -70,13 +70,19 @@ def test_freetext_safety_net_catches_unknown_keys():
     assert n == 1 and out["1"]["inputs"]["custom_field"] == "scrubbed prompt (node 1)"
 
 
-def test_short_and_filename_strings_are_kept():
+def test_scrubs_weights_keeps_infra_names():
     graph = {"1": {"inputs": {"vae_name": "flux_vae.safetensors", "mode": "balanced",
-                              "lora_name": "chroma/style/Chroma-Anime-v3.safetensors"},
+                              "clip_name": "t5xxl_fp8_scaled.safetensors",
+                              "lora_name": "chroma/style/SomeConcept-v3.safetensors",
+                              "ckpt_name": "SomeCheckpoint-Q4.gguf"},
                    "class_type": "Loader"}}
     out, n = palimpsest.scrub_graph(graph)
-    assert n == 0  # filename-like (has separator/extension) and short tokens are not free-text
-    assert out["1"]["inputs"]["lora_name"] == "chroma/style/Chroma-Anime-v3.safetensors"
+    assert n == 0  # no prompts here
+    assert out["1"]["inputs"]["lora_name"] == "scrubbed-lora"            # weight name scrubbed
+    assert out["1"]["inputs"]["ckpt_name"] == "scrubbed-checkpoint"
+    assert out["1"]["inputs"]["vae_name"] == "flux_vae.safetensors"      # infra kept
+    assert out["1"]["inputs"]["clip_name"] == "t5xxl_fp8_scaled.safetensors"
+    assert out["1"]["inputs"]["mode"] == "balanced"                      # short token kept
 
 
 # --------------------------------------------------------------------------------
