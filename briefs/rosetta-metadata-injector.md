@@ -56,7 +56,7 @@ A single newline-structured string:
 ```
 <positive prompt>
 Negative prompt: <negative prompt>
-Steps: 4, Sampler: dpmpp_2m, Scheduler: sgm_uniform, CFG scale: 1, Seed: 384881030039906, Size: 896x1152, Model: flux-2-klein-9b-Q4_K_M, Denoising strength: 1, Version: <tool name>
+Steps: 4, Sampler: dpmpp_2m, Scheduler: sgm_uniform, CFG scale: 1, Seed: 384881030039906, Size: 896x1152, Model: flux-2-klein-9b-Q4_K_M, Module 1: Qwen3-8B-UD-Q4_K_XL, Module 2: flux2-vae, Denoising strength: 1, Version: <tool name>
 ```
 
 Rules SD Prompt Reader's `A1111` parser imposes (`format/a1111.py`):
@@ -71,6 +71,12 @@ CivitAI additionally recognizes (subset, to confirm during verification):
 - `Model hash: <autov2>` + `Model: <name>` — links the checkpoint to its CivitAI page.
 - `Lora hashes: "name1: hash1, name2: hash2"` — links LoRAs.
 - `Hashes: {json}` — alternative resource-hash carrier.
+- `Module 1: <name>`, `Module 2: …` — SD-Forge's "VAE/TE" list (the separate text-encoder and VAE
+  files), 1-indexed, basename without extension. Modern models (Flux, Qwen, Chroma, …) load the
+  text encoder from its own file — often an LLM (T5, Qwen, Ministral) — which a plain `Model:` field
+  has no slot for; `chandra` emits each as a `Module N`, text encoders first then the VAE, matching
+  Forge's `forge_additional_modules` serialization (`modules/processing.py`). CivitAI links the ones
+  it knows; the rest stay as faithful, human-readable context.
 - `Denoising strength`, `Version`, and arbitrary extra `Key: value` fields (shown as-is).
 
 ### Honest reporting
@@ -153,7 +159,12 @@ but the *input-name contract* is stable, so we match on that. The walk:
    (`gguf_name`/`unet_name`), `unCLIPCheckpointLoader`, etc.
 6. **Extract VAE** (extra): the sampler's `optional_vae` or the VAE-decode node's `vae` → a
    VAE-loader role (`vae_name`). Recorded as an extra field, not required.
-7. **Size:** taken from the PNG's own width × height — the most reliable source, and what SD
+7. **Extract text encoder(s)** (extra): from the positive text-encoder node, follow its `clip` link
+   back through any passthrough (LoRA, `CLIPSetLastLayer`, …) to the loader, collecting the
+   `clip_name*` file(s) — `DualCLIPLoader` exposes two. Empty when CLIP is baked into the checkpoint.
+   Together with the VAE, these are emitted as Forge `Module N` fields (see "CivitAI additionally
+   recognizes", above).
+8. **Size:** taken from the PNG's own width × height — the most reliable source, and what SD
    Prompt Reader itself uses. Tracing latent nodes would be actively wrong here: Flux.2's latent
    tile geometry differs from earlier models (feeding an old empty-latent node to Flux.2 *doubles*
    the output pixel size), and in inpaint/edit-inpaint the
@@ -178,7 +189,7 @@ All current samples are the user's own and share conventions, but the roles gene
 | base loader     | `CheckpointLoaderSimple`, `LoaderGGUF`, `UnetLoaderGGUF`                      | `ckpt_name`/`gguf_name`/`unet_name` |
 | lora            | `LoraLoaderModelOnly`, `LoraLoader`                                           | `lora_name`, `strength_model`  |
 | vae loader      | `VAELoader`, `VaeGGUF`                                                        | `vae_name`                     |
-| clip loader     | `CLIPLoader`, `ClipLoaderGGUF`/`CLIPLoaderGGUF`                              | `clip_name` (extra)            |
+| clip loader     | `CLIPLoader`, `ClipLoaderGGUF`/`CLIPLoaderGGUF`, `DualCLIPLoader`            | `clip_name`/`clip_name1`/… (→ `Module N`) |
 | text encoder    | `CLIPTextEncode`, `TextEncodeQwenImageEditPlus`                              | `text`/`prompt`                |
 | cond passthrough| `ReferenceLatent`, `InpaintModelConditioning`, `ControlNetApplyAdvanced`, …  | `conditioning`/`positive`/`negative` |
 

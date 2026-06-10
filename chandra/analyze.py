@@ -59,6 +59,7 @@ class Recipe:
     model_hash: Optional[str] = None    # AutoV2, filled in by the hashing step (--hash)
     loras: list = field(default_factory=list)
     vae: Optional[str] = None
+    text_encoders: list = field(default_factory=list)   # separate CLIP/T5 loader files (Forge "VAE/TE")
     width: Optional[int] = None
     height: Optional[int] = None
     sampler_class: Optional[str] = None
@@ -294,6 +295,41 @@ def _walk_model(graph, ref):
     return model_name, loras
 
 
+_CLIP_NAME_FIELDS = ("clip_name", "clip_name1", "clip_name2", "clip_name3", "clip_name4")
+
+
+def _walk_clip(graph, ref, depth=0):
+    """Follow a `clip` link back through passthrough nodes (LoRA, CLIPSetLastLayer, …) to the
+    text-encoder loader; return its clip_name file(s) in field order.
+
+    Empty when CLIP is baked into the checkpoint (CheckpointLoaderSimple has no clip_name field and
+    no `clip` input to keep following) — there's no separate text-encoder file in that case.
+    """
+    if not _is_link(ref) or depth > _MAX_DEPTH:
+        return []
+    node = graph.get(ref[0])
+    if node is None:
+        return []
+    ins = _inputs(node)
+    names = [n for n in (_resolve_string(graph, ins[f]) for f in _CLIP_NAME_FIELDS if f in ins) if n]
+    if names:
+        return names
+    return _walk_clip(graph, ins.get("clip"), depth + 1)
+
+
+def _find_text_encoders(graph, sampler_id):
+    """The separate text-encoder file(s) feeding the conditioning, as Forge's "VAE/TE" modules.
+
+    Traces the sampler's positive conditioning back to its text-encoder node, then that node's `clip`
+    link back to the loader (DualCLIPLoader, CLIPLoader, …). Returns [] when CLIP comes baked in the
+    checkpoint, so a fully self-contained checkpoint emits no Module fields.
+    """
+    enc_id = _trace_conditioning_node(graph, _inputs(graph.get(sampler_id)).get("positive"))
+    if enc_id is None:
+        return []
+    return _walk_clip(graph, _inputs(graph[enc_id]).get("clip"))
+
+
 def _find_vae(graph, sampler_id):
     """Best-effort VAE name from the sampler's optional_vae / vae input."""
     ins = _inputs(graph.get(sampler_id))
@@ -346,6 +382,7 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
     # Model + LoRAs, and VAE.
     recipe.model, recipe.loras = _walk_model(graph, ins.get("model"))
     recipe.vae = _find_vae(graph, sampler_id)
+    recipe.text_encoders = _find_text_encoders(graph, sampler_id)
 
     if recipe.positive is None and recipe.negative is None:
         recipe.warnings.append("no prompt text resolved")
@@ -369,6 +406,8 @@ def format_recipe(recipe: Recipe) -> str:
         lines.append(f"  lora:   {lora.name!r} (strength {lora.strength}){lora_hash}")
     if recipe.vae:
         lines.append(f"vae:      {recipe.vae!r}")
+    for te in recipe.text_encoders:
+        lines.append(f"te:       {te!r}")
     lines.append(f"sampler:  {recipe.sampler_name!r}  scheduler: {recipe.scheduler!r}  "
                  f"({recipe.sampler_class})")
     lines.append(f"steps:    {recipe.steps}   cfg: {recipe.cfg}   denoise: {recipe.denoise}   "
@@ -399,6 +438,8 @@ def format_description(recipe: Recipe) -> str:
         lines.append(f"LoRA:     {lora.name} (strength {lora.strength}){lora_hash}")
     if recipe.vae:
         lines.append(f"VAE:      {recipe.vae}")
+    for te in recipe.text_encoders:
+        lines.append(f"Text enc: {te}")
     lines.append(f"Sampler:  {recipe.sampler_name} / {recipe.scheduler}")
     lines.append(f"Steps: {recipe.steps}  CFG: {recipe.cfg}  Denoise: {recipe.denoise}  "
                  f"Seed: {recipe.seed}")

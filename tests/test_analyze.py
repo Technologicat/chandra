@@ -41,6 +41,7 @@ def test_analyze_minimal_txt2img():
     assert r.seed == 42 and r.steps == 20 and r.cfg == 7.0 and r.denoise == 1.0
     assert r.sampler_name == "euler" and r.scheduler == "normal"
     assert r.model == "model.safetensors" and r.vae == "vae.pt"
+    assert r.text_encoders == []                # CLIP baked into the checkpoint -> no separate file
     assert r.width == 512 and r.height == 512
     assert r.warnings == []
 
@@ -73,6 +74,43 @@ def test_trace_conditioning_through_inpaint_dual_output():
     }
     assert analyze._trace_conditioning(graph, ["imc", 0]) == "POS"  # slot 0 -> positive branch
     assert analyze._trace_conditioning(graph, ["imc", 1]) == "NEG"  # slot 1 -> negative branch
+
+
+def test_text_encoders_from_dual_clip_loader():
+    # Flux's separate encoders: DualCLIPLoader exposes both clip_name fields, in order.
+    graph = {
+        "save": {"class_type": "SaveImage", "inputs": {"images": ["ks", 0]}},
+        "ks": {"class_type": "KSampler", "inputs": {
+            "seed": 1, "steps": 4, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple",
+            "model": ["unet", 0], "positive": ["pos", 0], "negative": ["neg", 0]}},
+        "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": "a cat", "clip": ["clip", 0]}},
+        "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry", "clip": ["clip", 0]}},
+        "clip": {"class_type": "DualCLIPLoader", "inputs": {
+            "clip_name1": "clip_l.safetensors", "clip_name2": "t5xxl_fp16.safetensors", "type": "flux"}},
+        "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": "flux1-dev.safetensors"}},
+    }
+    r = analyze.analyze(graph, 8, 8)
+    assert r.text_encoders == ["clip_l.safetensors", "t5xxl_fp16.safetensors"]
+    assert r.model == "flux1-dev.safetensors"
+
+
+def test_text_encoders_traced_through_lora_passthrough():
+    # The encoder's clip comes through a LoraLoader (which patches CLIP); the walk follows it back
+    # to the real loader rather than stopping at the LoRA.
+    graph = {
+        "save": {"class_type": "SaveImage", "inputs": {"images": ["ks", 0]}},
+        "ks": {"class_type": "KSampler", "inputs": {
+            "steps": 4, "cfg": 1.0, "sampler_name": "euler",
+            "model": ["lora", 0], "positive": ["pos", 0], "negative": ["neg", 0]}},
+        "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": "x", "clip": ["lora", 1]}},
+        "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": "y", "clip": ["lora", 1]}},
+        "lora": {"class_type": "LoraLoader", "inputs": {
+            "lora_name": "L.safetensors", "strength_model": 1.0, "model": ["unet", 0], "clip": ["clipl", 0]}},
+        "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": "u.safetensors"}},
+        "clipl": {"class_type": "CLIPLoader", "inputs": {"clip_name": "t5.gguf"}},
+    }
+    r = analyze.analyze(graph, 8, 8)
+    assert r.text_encoders == ["t5.gguf"]
 
 
 def test_trace_conditioning_through_reference_latent():

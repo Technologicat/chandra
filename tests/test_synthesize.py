@@ -99,6 +99,22 @@ def test_cfg_and_steps_formatting():
     assert sett["CFG scale"] == "4.5"  # real fraction kept
 
 
+def test_module_fields_for_text_encoders_and_vae():
+    # Forge serializes the "VAE/TE" list as Module N (1-indexed, basename without extension); text
+    # encoders first, VAE last. A plain `Model:` field has no slot for Flux's separate encoders.
+    r = Recipe(positive="x", steps=4, sampler_name="euler", model="flux.gguf", width=8, height=8,
+               text_encoders=["clip/clip_l.safetensors", "t5xxl_fp16.safetensors"], vae="ae.safetensors")
+    _, _, sett = a1111_parse(synthesize(r))
+    assert sett["Module 1"] == "clip_l"          # basename, extension and any subdir dropped
+    assert sett["Module 2"] == "t5xxl_fp16"
+    assert sett["Module 3"] == "ae"              # VAE comes after the text encoders
+
+
+def test_no_module_fields_without_text_encoders_or_vae():
+    s = synthesize(Recipe(positive="x", steps=4, sampler_name="euler", model="m", width=8, height=8))
+    assert "Module" not in s                      # a self-contained checkpoint emits no Module fields
+
+
 # --------------------------------------------------------------------------------
 # Integration: every sample synthesizes to SDPR-parseable output
 

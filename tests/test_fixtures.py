@@ -79,6 +79,15 @@ def test_qwen_edit_model_resolves():
     assert r.model == "scrubbed-checkpoint"
 
 
+def test_separate_text_encoders_become_modules():
+    # Modern models load the text encoder from a separate file (often an LLM). The name is public
+    # infrastructure, so scrub keeps it; it surfaces as a Forge Module field in the synthesized params.
+    r = _recipe("flux2-txt2img.png")
+    assert r.text_encoders                                          # a separate encoder file resolved
+    params = synthesize.synthesize(r)
+    assert "Module 1:" in params                                    # emitted as a Forge VAE/TE module
+
+
 def test_inpaint_stitch_resolves():
     # Regression guard for the crop-and-stitch sink->sampler path (structure, not prose).
     r = _recipe("qwen2512-inpaint.png")
