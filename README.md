@@ -16,9 +16,20 @@ only happens when you explicitly ask for `inject`.
 ```bash
 chandra show image.png                 # preview the synthesized metadata
 chandra inject *.png                   # write metadata into a batch, in place
+chandra inject imgs/                    # …or hand it a directory (recursed)
 chandra search starfleet captain       # find images whose prompt mentions a starfleet captain
 chandra search catgirl -d imgs | chandra search -n blurry   # chain searches to refine the result set
+chandra search catgirl -d imgs | chandra inject             # inject only the images a search found
 ```
+
+All three commands take the same inputs: files and/or directories (directories are recursed), or a
+list of paths piped in on stdin, one per line — which is what lets a `search` feed `show` or `inject`.
+`search` takes its roots with `-d` (its positional arguments are the search terms); `show` and
+`inject` take them as positional arguments. With nothing to act on, each command prints a short usage
+instead of guessing: bare `chandra search` asks for terms, bare `chandra show` / `chandra inject` ask
+for paths. The one convenience is that `search` (once it has terms) defaults its search root to the
+current directory; `show` and `inject` never default to the cwd — so a bare `chandra inject` can't
+modify files there by surprise.
 
 Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
 a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and

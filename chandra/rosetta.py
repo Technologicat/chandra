@@ -16,29 +16,35 @@ the README for the lineage); the CLI surface is the descriptive verbs.
 import json
 import os
 import sys
-from pathlib import Path
 
 from . import analyze as _analyze
 from . import hashing as _hashing
+from . import inputs as _inputs
 from . import pngchunks
 from . import synthesize as _synthesize
 
-__all__ = ["add_subparser", "run_show", "run_inject", "extract_recipe", "iter_png_paths"]
+__all__ = ["add_subparser", "run_show", "run_inject", "extract_recipe"]
 
 
 def _add_paths_arg(p):
     """Shared positional + flags for `show` and `inject`."""
-    paths = p.add_argument("paths", nargs="*", metavar="PNG", help="PNG file(s) and/or directories to process")
+    paths = p.add_argument("paths", nargs="*", metavar="PNG",
+                           help="PNG file(s) and/or directories to process (directories recursed). "
+                                "If none are given, paths are read from stdin when piped")
     # Restrict file-argument completion to PNGs when argcomplete is available.
     try:
         from argcomplete.completers import FilesCompleter
         paths.completer = FilesCompleter(("png", "PNG"))
     except ImportError:
         pass
+    p.add_argument("--stdin", action="store_true",
+                   help="read image paths from stdin, one per line (for chaining: "
+                        "`chandra search … | chandra inject`)")
     p.add_argument("--hash", action="store_true",
-                   help="compute AutoV2 hashes for model/LoRA resources (forthcoming)")
+                   help="compute AutoV2 hashes for model/LoRA resources (for CivitAI auto-linking)")
     p.add_argument("--models-dir", action="append", metavar="DIR",
-                   help="directory to search for model/LoRA files when hashing (repeatable)")
+                   help="directory to search for model/LoRA files when hashing (repeatable; also "
+                        "$CHANDRA_MODELS_DIR, a $PATH-style colon-separated list)")
 
 
 def add_subparser(subparsers):
@@ -56,16 +62,6 @@ def add_subparser(subparsers):
         description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place.")
     _add_paths_arg(inject)
     inject.set_defaults(func=run_inject, parser=inject)
-
-
-def iter_png_paths(paths):
-    """Expand the given files/directories into PNG paths (directories recursed)."""
-    for p in paths:
-        path = Path(p)
-        if path.is_dir():
-            yield from sorted(path.rglob("*.png"))
-        else:
-            yield path
 
 
 def _load(png_path):
@@ -102,10 +98,14 @@ def _hashing_context(args):
 
 def _process(args, write: bool) -> int:
     """Shared read → analyze → (hash) → synthesize loop for `show` (write=False) and `inject`."""
-    paths = list(iter_png_paths(args.paths))
+    # Neither verb defaults to recursing the cwd: a bare `chandra show`/`inject` prints usage rather
+    # than acting on an implicit directory-wide set (inject would be a mass write; show stays its
+    # sister). Inputs must be given explicitly — as path arguments, or piped in (`search … | show`).
+    paths = list(_inputs.iter_image_paths(args.paths, use_stdin=args.stdin, default_cwd=False))
     if not paths:
         args.parser.print_usage(sys.stderr)
-        print(f"{args.parser.prog}: give one or more PNG files or directories.", file=sys.stderr)
+        print(f"{args.parser.prog}: give one or more PNG files or directories "
+              f"(or pipe paths in).", file=sys.stderr)
         return 2
     ctx = _hashing_context(args)
     status = 0

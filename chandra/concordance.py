@@ -19,9 +19,9 @@ carries only matching paths, so refinement chains as `chandra search A | chandra
 import json
 import os
 import sys
-from pathlib import Path
 
 from . import analyze as _analyze
+from . import inputs as _inputs
 from . import pngchunks
 
 try:
@@ -183,16 +183,7 @@ def _highlight_snippet(haystack, fragments, query, exact, ignore_case, color, wi
 
 def _input_paths(args):
     """Yield candidate PNG paths: the `-d` roots (recursed) if given, else stdin when piped, else cwd."""
-    if args.dir:
-        for root in args.dir:
-            yield from sorted(Path(root).rglob("*.png"))
-    elif args.stdin or not sys.stdin.isatty():
-        for line in sys.stdin:
-            line = line.strip()
-            if line:
-                yield Path(line)
-    else:
-        yield from sorted(Path(".").rglob("*.png"))
+    return _inputs.iter_image_paths(args.dir, use_stdin=args.stdin, default_cwd=True)
 
 
 # --------------------------------------------------------------------------------

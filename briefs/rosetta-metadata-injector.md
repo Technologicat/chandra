@@ -226,7 +226,8 @@ Decision: **name + settings always; hashing is opt-in.** Implemented in `chandra
   model/LoRA files and emit `Model hash:` (before `Model:`) and `Lora hashes: "name: hash, …"`,
   enabling CivitAI page links. AutoV2 is used for *both* checkpoints and LoRAs (one scheme; LoRA
   files resolve via by-hash the same way). Requires the files to be locally accessible.
-  - **`--models-dir DIR`** (repeatable) or `$IGMT_MODELS_DIR` (os-pathsep list) names where to look;
+  - **`--models-dir DIR`** (repeatable) or `$CHANDRA_MODELS_DIR` (a list in `$PATH` form — colon-
+    separated on Linux/macOS, semicolon on Windows, via `os.pathsep`) names where to look;
     with `--hash` but no dir, we warn and emit names only. `ResourceResolver` indexes those dirs once
     (basename → paths) so resolving a graph name like `qwen/style/foo.safetensors` is a dict lookup,
     preferring a path whose tail matches the full relative name.
@@ -271,8 +272,16 @@ if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, mod
 - **`inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
   original image bytes and existing chunks are preserved verbatim — so an in-place rewrite is safe
   and a backup is just clutter.
-- Batch-first: both verbs accept files and/or directories (recurse), suited to sessions of hundreds
-  of images.
+- Batch-first, one input model shared with `search` (`chandra.inputs`): both verbs accept files
+  and/or directories (recursed) as positional arguments, or a list of paths piped in on stdin (one
+  per line) — so `chandra search … | chandra inject` injects exactly the images a search found. The
+  one asymmetry with `search` is where the explicit inputs go (positional here; `-d` for `search`,
+  whose positional slot is the search terms); recursion and stdin behave identically.
+- **Neither verb defaults to the cwd.** `search` (read-only) may recurse the current directory when
+  given no root, but `show`/`inject` do not: with no positional paths and nothing piped in, they
+  print a short usage and exit non-zero. This keeps the sisters symmetric and, crucially, means a
+  bare `chandra inject` can never mass-write into the current directory by surprise — a destructive
+  default has to be *typed* (an explicit path, even `.`, or piped input).
 - Idempotent: re-running `inject` on an already-injected image replaces the existing `parameters`
   chunk in place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
 - Other flags: `--hash` (+ `--models-dir`) for resource hashing (on both verbs — `show` previews
@@ -361,14 +370,38 @@ keeps in the `workflow` (documenting model/quant choices) are preserved.
 
 `parameters` serves the SD tools, but it does nothing for a general Linux image viewer like **Pix**
 (the Linux Mint viewer, a gThumb fork) — yet the prompt should be visible there too, without any SD
-software. Pix/gThumb read standard metadata: for PNG, a `Description`/`Comment` textual chunk, and
-XMP `dc:description`. So, optionally (likely on by default), we *also* write a **human-readable
-summary** (positive/negative prompt + key settings) into a `Description` `tEXt`/`iTXt` chunk
-(and/or XMP), distinct from the machine-oriented `parameters` string.
+software. So, optionally (likely on by default), we *also* write a **human-readable summary**
+(positive/negative prompt + key settings) into the field Pix surfaces as its "Description", distinct
+from the machine-oriented `parameters` string.
 
-> **Verification owed:** confirm which field Pix actually surfaces — open an injected output in Pix
-> and check whether it reads PNG `Description`, `Comment`, or XMP `dc:description`, then write the
-> field(s) Pix honors. The user has Pix installed and is the natural verifier.
+**Which field, exactly (resolved from Pix/gThumb source).** Pix does *not* read the naive PNG
+`Description`/`Comment` `tEXt`/`iTXt` keyword chunks. It hands the whole file to **libexiv2** and
+reads `general::description` from the first non-empty of a tagset whose head is
+`Iptc.Application2.Caption`, then `Xmp.dc.description`, then `Exif.Photo.UserComment`,
+`Exif.Image.ImageDescription`, … . When *writing* the Description, gThumb sets three of these in
+concert: `Exif.Photo.UserComment`, `Xmp.dc.description`, `Iptc.Application2.Caption`. For a PNG,
+exiv2 serializes those into the standard PNG carrier chunks — XMP into an `iTXt` chunk keyed
+`XML:com.adobe.xmp`, EXIF/IPTC into `zTXt` "raw profile" chunks (and a native `eXIf` chunk on
+exiv2 ≥ 0.27.3). So the route that makes our text appear in Pix is **XMP `dc:description`** (with
+IPTC `Caption` as a belt-and-braces second target), *not* a plain `Description` text chunk.
+
+Implementation fits chandra's existing model: we already do lossless PNG chunk surgery, so we emit a
+minimal valid XMP packet carrying `dc:description` (and optionally `dc:title`, `dc:subject` for
+tags) and insert it as the `XML:com.adobe.xmp` `iTXt` chunk — no libexiv2 runtime dependency. The
+same chunk is what SD Prompt Reader-style tools ignore and general viewers honour, so the two
+metadata layers (`parameters` for SD tools, XMP for viewers) coexist cleanly.
+
+> **Empirical step still owed:** confirm that a *hand-written* XMP `iTXt` packet (ours, not exiv2's)
+> is parsed by the installed Pix — open an injected output in Pix and check the Description caption
+> shows. The contract above is grounded in the Pix/gThumb source (`extensions/exiv2_tools/`,
+> `extensions/comments/`); what remains is verifying our serialization is byte-compatible with what
+> libexiv2 expects to read. The user has Pix installed and is the natural verifier.
+
+> **Sidecar alternative (no file modification).** Pix also reads/writes legacy gThumb
+> `.comments/<name>.png.xml` sidecars (gzip-compressed XML, `<comment version="3.0">` with `<note>`
+> → Description, `<caption>` → Title, `<categories>` → tags). Writing those would surface the prompt
+> in Pix *without touching the image bytes at all* — a possible `--sidecar`-style mode, orthogonal to
+> embedded XMP. Noted as an option, not a commitment.
 
 ## Project shape
 
