@@ -1,13 +1,13 @@
 # chandra
 
-Tools for working with the metadata that image generators embed in their output.
+Tools for working with the metadata that AI image generators embed in their output.
 
 Everything is one command, **`chandra`**, with three subcommands:
 
 | Command | What it does |
 |---|---|
-| `chandra show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/SD-Forge metadata that `chandra inject` *would* write. Read-only. |
-| `chandra inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services that don't analyze ComfyUI graphs — notably [CivitAI](https://civitai.com) on upload and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader). |
+| `chandra show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/[SD-Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) metadata that `chandra inject` *would* write. Read-only. |
+| `chandra inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services and apps that don't analyze ComfyUI graphs — notably, [CivitAI](https://civitai.com) on upload, and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader) locally. |
 | `chandra search <terms…>` | Search the prompts embedded across a directory tree of generated images. |
 | `chandra scrub <png…>` | Strip a ComfyUI image to an anonymized skeleton — graph wiring kept, image/prompts/docs removed — safe to share when reporting a parsing bug. Writes a copy; never modifies the original. |
 
