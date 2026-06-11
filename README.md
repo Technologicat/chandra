@@ -2,35 +2,37 @@
 
 Tools for working with the metadata that AI image generators embed in their output.
 
-Everything is one command, **`chandra`**, with three subcommands:
+Everything is one command, **`chandra`**, with these subcommands:
 
 | Command | What it does |
 |---|---|
 | `chandra show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/[SD-Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) metadata that `chandra inject` *would* write. Read-only. |
 | `chandra inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services and apps that don't analyze ComfyUI graphs — notably, [CivitAI](https://civitai.com) on upload, and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader) locally. |
+| `chandra eject <png…>` | **Remove** that metadata again — the inverse of `inject`. Strips the `parameters` chunk and XMP description chandra wrote, leaving the original ComfyUI graph byte-intact. |
 | `chandra search <terms…>` | Search the prompts embedded across a directory tree of generated images. |
 | `chandra scrub <png…>` | Strip a ComfyUI image to an anonymized skeleton — graph wiring kept, image/prompts/docs removed — safe to share when reporting a parsing bug. Writes a copy; never modifies the original. |
 
 Reading and writing are deliberately separate commands: `show` never modifies anything, and writing
-only happens when you explicitly ask for `inject`.
+only happens when you explicitly ask for `inject` (or `eject`, to undo it).
 
 ```bash
 chandra show image.png                 # preview the synthesized metadata
 chandra inject *.png                   # write metadata into a batch, in place
 chandra inject imgs/                    # …or hand it a directory (recursed)
+chandra eject *.png                     # remove that metadata again (inverse of inject)
 chandra search starfleet captain       # find images whose prompt mentions a starfleet captain
 chandra search catgirl -d imgs | chandra search -n blurry   # chain searches to refine the result set
 chandra search catgirl -d imgs | chandra inject             # inject only the images a search found
 ```
 
-All three commands take the same inputs: files and/or directories (directories are recursed), or a
-list of paths piped in on stdin, one per line — which is what lets a `search` feed `show` or `inject`.
-`search` takes its roots with `-d` (its positional arguments are the search terms); `show` and
-`inject` take them as positional arguments. With nothing to act on, each command prints a short usage
-instead of guessing: bare `chandra search` asks for terms, bare `chandra show` / `chandra inject` ask
-for paths. The one convenience is that `search` (once it has terms) defaults its search root to the
-current directory; `show` and `inject` never default to the cwd — so a bare `chandra inject` can't
-modify files there by surprise.
+Every command takes the same inputs: files and/or directories (directories are recursed), or a
+list of paths piped in on stdin, one per line — which is what lets a `search` feed `show`, `inject`,
+or `eject`. `search` takes its roots with `-d` (its positional arguments are the search terms); the
+others take them as positional arguments. With nothing to act on, each command prints a short usage
+instead of guessing: bare `chandra search` asks for terms, bare `chandra show` / `inject` / `eject`
+ask for paths. The one convenience is that `search` (once it has terms) defaults its search root to
+the current directory; the writing commands never default to the cwd — so a bare `chandra inject` or
+`chandra eject` can't modify files there by surprise.
 
 Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
 a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and
@@ -84,6 +86,23 @@ LoRA's *strength* is recorded there. ComfyUI itself never writes LoRAs into the 
 human-readable views keep the prose clean and list them separately (`LoRA: name (strength X)` in the
 description and `chandra show --recipe`). The inline form lives only where it's an interchange
 convention; it's never presented as how the source tool wrote your prompt.
+
+## Undoing an inject (`eject`)
+
+Changed your mind? `chandra eject` is the inverse of `inject`: it removes the `parameters` chunk and
+the XMP description, leaving the original ComfyUI `prompt`/`workflow` chunks byte-for-byte intact — an
+`inject` followed by an `eject` restores the file exactly.
+
+```bash
+chandra eject *.png            # remove chandra's metadata from a batch, in place
+```
+
+By default `eject` removes **only metadata chandra wrote** — both layers carry a `chandra-rosetta`
+stamp (the `Version:` field of the `parameters` chunk and the `x:xmptk` attribute of the XMP packet),
+and anything unstamped is left alone, so it won't clobber a `parameters` block from A1111/Forge or an
+XMP caption some other tool added. Two flags adjust that: `--no-xmp` removes only the `parameters`
+chunk and leaves the XMP description; `--force` removes the `parameters` chunk and XMP regardless of
+who wrote them.
 
 ## Searching
 

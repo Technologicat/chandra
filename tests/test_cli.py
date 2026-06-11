@@ -15,6 +15,7 @@ def test_help_lists_subcommands(capsys):
     assert "search" in out
     assert "show" in out
     assert "inject" in out
+    assert "eject" in out
 
 
 def test_version_action(capsys):
@@ -64,4 +65,4 @@ def test_bare_chandra_lists_commands(capsys):
     # Bare `chandra` is friendly: it prints the help, which lists the commands, and exits 0.
     assert cli.main([]) == 0
     out = capsys.readouterr().out
-    assert "search" in out and "show" in out and "inject" in out
+    assert "search" in out and "show" in out and "inject" in out and "eject" in out

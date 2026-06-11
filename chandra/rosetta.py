@@ -1,13 +1,14 @@
-"""rosetta — the engine behind `chandra show` and `chandra inject`.
+"""rosetta — the engine behind `chandra show`, `chandra inject`, and `chandra eject`.
 
 Walks the ComfyUI `prompt` graph embedded in a PNG, reconstructs the generation recipe, and renders
 an AUTOMATIC1111 / SD-Forge `parameters` string so that services which don't analyze ComfyUI graphs
 (CivitAI, SD Prompt Reader) recognize the image. See `briefs/rosetta-metadata-injector.md`.
 
-Two verbs, a deliberate read/write split (writing is never the default):
+Three verbs, a deliberate read/write split (writing is never the default):
 
 - `chandra show`   — analyze and print (read-only); `--recipe` dumps the structured recipe instead.
-- `chandra inject` — write the synthesized `parameters` chunk into the PNG, in place.
+- `chandra inject` — write the synthesized `parameters` chunk (and an XMP description) into the PNG.
+- `chandra eject`  — remove that metadata again, restoring the image to its pre-inject state.
 
 The module keeps the name `rosetta` (it re-expresses one recipe in a script other tools read — see
 the README for the lineage); the CLI surface is the descriptive verbs.
@@ -17,6 +18,7 @@ import json
 import os
 import sys
 
+from . import TOOL_TAG
 from . import analyze as _analyze
 from . import hashing as _hashing
 from . import inputs as _inputs
@@ -24,11 +26,11 @@ from . import pngchunks
 from . import synthesize as _synthesize
 from . import xmp as _xmp
 
-__all__ = ["add_subparser", "run_show", "run_inject", "extract_recipe"]
+__all__ = ["add_subparser", "run_show", "run_inject", "run_eject", "extract_recipe"]
 
 
 def _add_paths_arg(p):
-    """Shared positional + flags for `show` and `inject`."""
+    """Shared positional + `--stdin` for any verb that takes image paths."""
     paths = p.add_argument("paths", nargs="*", metavar="PNG",
                            help="PNG file(s) and/or directories to process (directories recursed). "
                                 "If none are given, paths are read from stdin when piped")
@@ -41,6 +43,10 @@ def _add_paths_arg(p):
     p.add_argument("--stdin", action="store_true",
                    help="read image paths from stdin, one per line (for chaining: "
                         "`chandra search … | chandra inject`)")
+
+
+def _add_hash_args(p):
+    """Hashing flags, shared by `show` and `inject` (eject does no analysis, so it has none)."""
     p.add_argument("--hash", action="store_true",
                    help="compute AutoV2 hashes for model/LoRA resources (for CivitAI auto-linking)")
     p.add_argument("--models-dir", action="append", metavar="DIR",
@@ -49,11 +55,12 @@ def _add_paths_arg(p):
 
 
 def add_subparser(subparsers):
-    """Register the `show` and `inject` subcommands on the dispatcher's subparsers action."""
+    """Register the `show`, `inject`, and `eject` subcommands on the dispatcher's subparsers action."""
     show = subparsers.add_parser(
         "show", help="print the metadata that would be written (read-only)",
         description="Analyze a ComfyUI PNG and print the A1111/CivitAI metadata that `inject` would write.")
     _add_paths_arg(show)
+    _add_hash_args(show)
     show.add_argument("--recipe", action="store_true",
                       help="print the structured recipe instead of the parameters string")
     show.set_defaults(func=run_show, parser=show)
@@ -64,10 +71,25 @@ def add_subparser(subparsers):
                     "Also embeds the recipe as an XMP description, so general image viewers (Pix, etc.) "
                     "show it too.")
     _add_paths_arg(inject)
+    _add_hash_args(inject)
     inject.add_argument("--no-xmp", action="store_true",
                         help="skip the XMP description for general viewers (write only the SD-tool "
                              "`parameters` chunk)")
     inject.set_defaults(func=run_inject, parser=inject)
+
+    eject = subparsers.add_parser(
+        "eject", help="remove the A1111/CivitAI metadata that `inject` wrote",
+        description="Remove chandra's injected metadata layer — the A1111 `parameters` chunk and the XMP "
+                    "description — from the PNG(s), in place, leaving the original ComfyUI "
+                    "`prompt`/`workflow` chunks byte-intact. By default only metadata chandra wrote "
+                    "(stamped `chandra-rosetta`) is removed; `--force` removes any `parameters`/XMP "
+                    "regardless of origin.")
+    _add_paths_arg(eject)
+    eject.add_argument("--no-xmp", action="store_true",
+                       help="remove only the `parameters` chunk; leave the XMP description in place")
+    eject.add_argument("--force", action="store_true",
+                       help="remove the `parameters` chunk and XMP even if chandra didn't write them")
+    eject.set_defaults(func=run_eject, parser=eject)
 
 
 def _load(png_path):
@@ -156,3 +178,79 @@ def run_show(args) -> int:
 def run_inject(args) -> int:
     """`chandra inject`: read → analyze → synthesize → write the parameters chunk in place."""
     return _process(args, write=True)
+
+
+def _ours_parameters(text: str) -> bool:
+    """True if a `parameters` chunk was written by chandra (carries its `Version:` stamp)."""
+    return f"Version: {TOOL_TAG}" in text
+
+
+def _ours_xmp(packet: str) -> bool:
+    """True if an XMP packet was written by chandra (carries its `x:xmptk` toolkit stamp)."""
+    return f'x:xmptk="{TOOL_TAG}' in packet
+
+
+def run_eject(args) -> int:
+    """`chandra eject`: remove chandra's injected metadata layer, in place — the inverse of `inject`.
+
+    Strips the A1111 `parameters` chunk and the XMP `dc:description` that `inject` wrote, leaving the
+    original ComfyUI `prompt`/`workflow` chunks byte-intact: the image is left dejected, stripped of
+    the layer that made its recipe legible to strangers, but still fully analyzable. Only chandra's
+    own output is removed — the `parameters` chunk and XMP each carry a `chandra-rosetta` stamp, and
+    anything unstamped is left untouched (a third party's `parameters`/XMP is not chandra's to
+    delete). `--force` overrides that and removes them regardless; `--no-xmp` removes only the
+    `parameters` chunk, leaving the XMP description in place.
+
+    Unlike `show`/`inject`, this needs no ComfyUI `prompt` chunk: it is pure keyword-scoped chunk
+    removal, so it works on any PNG (it just reports "nothing to eject" when there's nothing of ours).
+    """
+    paths = list(_inputs.iter_image_paths(args.paths, use_stdin=args.stdin, default_cwd=False))
+    if not paths:
+        args.parser.print_usage(sys.stderr)
+        print(f"{args.parser.prog}: give one or more PNG files or directories "
+              f"(or pipe paths in).", file=sys.stderr)
+        return 2
+    force = getattr(args, "force", False)
+    keep_xmp = getattr(args, "no_xmp", False)
+    status = 0
+    for path in paths:
+        try:
+            chunks = pngchunks.parse_file(path)
+        except Exception as e:
+            print(f"{path}: ERROR: {e}", file=sys.stderr)
+            status = 1
+            continue
+        fields = pngchunks.text_fields(chunks)
+        out = chunks
+        removed = []
+
+        params = fields.get("parameters")
+        if params is not None:
+            if force or _ours_parameters(params):
+                out = pngchunks.remove_text_fields(out, "parameters")
+                removed.append("parameters")
+            else:
+                print(f"{path}: leaving non-chandra `parameters` in place (use --force to remove it)",
+                      file=sys.stderr)
+
+        if not keep_xmp:
+            packet = fields.get(pngchunks.XMP_KEYWORD)
+            if packet is not None:
+                if force or _ours_xmp(packet):
+                    out = pngchunks.remove_text_fields(out, pngchunks.XMP_KEYWORD)
+                    removed.append("XMP description")
+                else:
+                    print(f"{path}: leaving non-chandra XMP in place (use --force to remove it)",
+                          file=sys.stderr)
+
+        if not removed:
+            print(f"{path}: nothing to eject")
+            continue
+        try:
+            pngchunks.write_file(path, out)
+        except Exception as e:
+            print(f"{path}: ERROR writing: {e}", file=sys.stderr)
+            status = 1
+            continue
+        print(f"ejected ({', '.join(removed)}) → {path}")
+    return status

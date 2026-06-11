@@ -7,13 +7,14 @@ Routes subcommands to the individual tools:
     chandra search ...   search prompts across a directory of images
     chandra show ...     print the A1111/CivitAI metadata for a ComfyUI image (read-only)
     chandra inject ...   write that metadata into the image(s)
+    chandra eject ...    remove that metadata again (the inverse of inject)
     chandra scrub ...    strip a ComfyUI image to a de-branded, shareable skeleton
 
 Each subtool module registers its subparser(s) (``add_subparser``) and sets an ``args.func`` handler,
 so the dispatcher only has to wire them up and route. (The modules keep the names ``rosetta`` —
-``show``/``inject`` —, ``concordance`` — ``search`` —, and ``palimpsest`` — ``scrub``; see the README
-for the lineage.) Tab completion is provided by argcomplete when installed; it derives the completion
-set from the live parser, so new subcommands appear in completion automatically.
+``show``/``inject``/``eject`` —, ``concordance`` — ``search`` —, and ``palimpsest`` — ``scrub``; see
+the README for the lineage.) Tab completion is provided by argcomplete when installed; it derives the
+completion set from the live parser, so new subcommands appear in completion automatically.
 """
 
 import argparse

@@ -41,3 +41,9 @@ def test_xml_special_chars_are_escaped_and_recovered():
 
 def test_uses_x_default_language_alternative():
     assert 'xml:lang="x-default"' in xmp.build("x")
+
+
+def test_packet_carries_chandra_toolkit_stamp():
+    # The `x:xmptk` stamp is what lets `chandra eject` recognize and remove only its own XMP.
+    from chandra import TOOL_TAG
+    assert f'x:xmptk="{TOOL_TAG}' in xmp.build("x")

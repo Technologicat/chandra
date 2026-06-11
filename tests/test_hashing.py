@@ -133,7 +133,10 @@ def test_cli_hash_emits_hashes(qwen_sample, tmp_path, capsys):
     assert "Lora hashes: " in out
 
 
-def test_cli_hash_without_models_dir_warns_and_omits(qwen_sample, capsys):
+def test_cli_hash_without_models_dir_warns_and_omits(qwen_sample, capsys, monkeypatch):
+    # "no models dir" means neither --models-dir nor $CHANDRA_MODELS_DIR — clear the env var so the
+    # test holds regardless of the developer's shell (it's routinely set during live testing).
+    monkeypatch.delenv("CHANDRA_MODELS_DIR", raising=False)
     assert cli.main(["show", "--hash", str(qwen_sample)]) == 0
     captured = capsys.readouterr()
     assert "Model hash:" not in captured.out      # nothing hashed

@@ -17,7 +17,7 @@ Honest reporting: negatives are emitted even at CFG 1 (turbo models run there wi
 negative); fields we couldn't resolve are omitted, never guessed.
 """
 
-from . import __version__
+from . import TOOL_TAG, __version__
 
 __all__ = ["synthesize"]
 
@@ -108,7 +108,7 @@ def synthesize(recipe, version: str = None) -> str:
     hashed = [(_basename_no_ext(lora.name), lora.hash) for lora in recipe.loras if lora.name and lora.hash]
     if hashed:
         settings.append('Lora hashes: "' + ", ".join(f"{name}: {h}" for name, h in hashed) + '"')
-    settings.append(f"Version: chandra-rosetta {version}")
+    settings.append(f"Version: {TOOL_TAG} {version}")
 
     if settings:
         parts.append(", ".join(settings))

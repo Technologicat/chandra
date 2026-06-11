@@ -14,6 +14,8 @@ our `dc:description` is the value they surface.
 
 from xml.sax.saxutils import escape
 
+from . import TOOL_TAG, __version__
+
 __all__ = ["build"]
 
 # The XMP packet wrapper (XMP spec, part 1). The U+FEFF in the begin PI is the spec's byte-order
@@ -22,17 +24,24 @@ _XPACKET_BEGIN = '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>'
 _XPACKET_END = '<?xpacket end="w"?>'
 
 
-def build(description: str) -> str:
+def build(description: str, version: str = None) -> str:
     """Return an XMP packet (a UTF-8 XML string) carrying `description` as `dc:description`.
 
     `dc:description` is a language alternative, so the text is wrapped in an `rdf:Alt` / `rdf:li`
     with `xml:lang="x-default"` — the shape exiv2 and other readers expect for a localizable text
     property. The text goes in element content, so escaping `& < >` is sufficient.
+
+    The `x:xmpmeta` element carries `x:xmptk` (the XMP "toolkit" attribute) stamped with chandra's
+    version, so `chandra eject` can recognize its own XMP and remove only that — never a third
+    party's. Readers ignore `x:xmptk` when resolving the caption.
     """
+    if version is None:
+        version = __version__
     text = escape(description)
+    toolkit = escape(f"{TOOL_TAG} {version}", {'"': "&quot;"})  # attribute value: also escape the quote
     return (
         f"{_XPACKET_BEGIN}\n"
-        '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n'
+        f'<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="{toolkit}">\n'
         ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'
         '  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">\n'
         "   <dc:description>\n"

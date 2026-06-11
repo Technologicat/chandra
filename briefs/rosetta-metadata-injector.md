@@ -300,29 +300,45 @@ if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, mod
 
 ## CLI design
 
-- **Two verbs, a read/write split.** `chandra show <png...>` analyzes and prints (the synthesized
+- **Three verbs, a read/write split.** `chandra show <png...>` analyzes and prints (the synthesized
   `parameters` string, or the parsed `Recipe` with `--recipe`), writing nothing. `chandra inject
-  <png...>` writes the `parameters` chunk in place. Writing is its *own command*, never a side effect
-  of the read path — so a stray `chandra show .` can't mutate anything, and you opt into writing by
-  *typing* `inject`. (This replaced an earlier `rosetta [--inject]` flag model; the split makes the
-  destructive action even more explicit. The engine module is still named `rosetta`.)
+  <png...>` writes the `parameters` chunk (and an XMP description) in place. `chandra eject <png...>`
+  removes them again. Writing is its *own command*, never a side effect of the read path — so a stray
+  `chandra show .` can't mutate anything, and you opt into writing by *typing* `inject`/`eject`. (This
+  replaced an earlier `rosetta [--inject]` flag model; the split makes the destructive action even
+  more explicit. The engine module is still named `rosetta`.)
 - **`inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
   original image bytes and existing chunks are preserved verbatim — so an in-place rewrite is safe
   and a backup is just clutter.
-- Batch-first, one input model shared with `search` (`chandra.inputs`): both verbs accept files
+- **`eject` is the exact inverse of `inject`.** It removes the `parameters` chunk and the XMP
+  `dc:description` and nothing else, so an `inject` followed by an `eject` restores the file
+  byte-for-byte (chandra-written PNGs carry correct CRCs, so the untouched chunks re-serialize
+  unchanged). It needs no ComfyUI `prompt` chunk — it's pure keyword-scoped chunk removal, not an
+  analysis — so it works on any PNG and simply reports "nothing to eject" when there's nothing of
+  ours. **Ours-only by default:** both layers `inject` writes are self-identifying — the `parameters`
+  chunk via its `Version: chandra-rosetta …` field, the XMP packet via an `x:xmptk="chandra-rosetta …"`
+  toolkit attribute (the standard XMP slot for "which tool wrote this," ignored by caption readers) —
+  and `eject` removes only stamped metadata, leaving a third party's `parameters`/XMP untouched. This
+  mirrors how the harness treats deletion as the harder-to-undo direction: don't clobber what you
+  didn't write. `--force` overrides it (remove regardless of origin); `--no-xmp` removes only the
+  `parameters` chunk, mirroring `inject --no-xmp`. The shared stamp lives in one place
+  (`chandra.TOOL_TAG`), read by both the synthesizer/XMP builder and the eject detector.
+- Batch-first, one input model shared with `search` (`chandra.inputs`): every verb accepts files
   and/or directories (recursed) as positional arguments, or a list of paths piped in on stdin (one
-  per line) — so `chandra search … | chandra inject` injects exactly the images a search found. The
-  one asymmetry with `search` is where the explicit inputs go (positional here; `-d` for `search`,
-  whose positional slot is the search terms); recursion and stdin behave identically.
-- **Neither verb defaults to the cwd.** `search` (read-only) may recurse the current directory when
-  given no root, but `show`/`inject` do not: with no positional paths and nothing piped in, they
-  print a short usage and exit non-zero. This keeps the sisters symmetric and, crucially, means a
-  bare `chandra inject` can never mass-write into the current directory by surprise — a destructive
-  default has to be *typed* (an explicit path, even `.`, or piped input).
+  per line) — so `chandra search … | chandra inject` injects exactly the images a search found (and
+  `… | chandra eject` un-injects exactly those). The one asymmetry with `search` is where the explicit
+  inputs go (positional here; `-d` for `search`, whose positional slot is the search terms); recursion
+  and stdin behave identically.
+- **No write verb defaults to the cwd.** `search` (read-only) may recurse the current directory when
+  given no root, but `show`/`inject`/`eject` do not: with no positional paths and nothing piped in,
+  they print a short usage and exit non-zero. This keeps the sisters symmetric and, crucially, means a
+  bare `chandra inject`/`eject` can never mass-write into the current directory by surprise — a
+  destructive default has to be *typed* (an explicit path, even `.`, or piped input).
 - Idempotent: re-running `inject` on an already-injected image replaces the existing `parameters`
   chunk in place and emits exactly one — see the chunk-surgery rules below for the tEXt/iTXt detail.
-- Other flags: `--hash` (+ `--models-dir`) for resource hashing (on both verbs — `show` previews
-  what `inject` would write); a skip-if-present / `--force` policy; verbosity.
+- Other flags: `--hash` (+ `--models-dir`) for resource hashing (on `show`/`inject` — `show` previews
+  what `inject` would write; `eject` does no analysis, so it carries neither); a skip-if-present /
+  `--force` policy; verbosity.
 
 ## PNG chunk surgery (lossless injection)
 
@@ -449,16 +465,16 @@ Pure-Python PDM project (per the fleet's standard setup); developed on Python 3.
 `requires-python >= 3.11`. It's an app (CLI), so it **commits `pdm.lock`**.
 
 **One dispatcher entry point: `chandra`.** A single console script with argparse subparsers routes to
-four descriptive verbs — `chandra search`, `chandra show`, `chandra inject`, `chandra scrub`. One PATH
-entry no matter how many subcommands we add; `chandra --help` lists them; verbs are self-documenting
-(descriptive beats evocative as subcommands — `git commit`, not `git rosetta`). The engine modules
-keep their layered names — `rosetta` powers `show`/`inject`, `concordance` powers `search`,
-`palimpsest` powers `scrub` (lineage in the README). Each module registers its subparser(s) via
+five descriptive verbs — `chandra search`, `chandra show`, `chandra inject`, `chandra eject`,
+`chandra scrub`. One PATH entry no matter how many subcommands we add; `chandra --help` lists them;
+verbs are self-documenting (descriptive beats evocative as subcommands — `git commit`, not
+`git rosetta`). The engine modules keep their layered names — `rosetta` powers `show`/`inject`/`eject`,
+`concordance` powers `search`, `palimpsest` powers `scrub` (lineage in the README). Each module registers its subparser(s) via
 `add_subparser` and sets an `args.func`; the dispatcher routes. Tools are unit-tested by driving the
 dispatcher: `cli.main(["show", ...])`. (Distribution, import package, and command are all `chandra` —
 naming lore in the README.)
 
-- **`rosetta`** (engine for `show` / `inject`) — the analyzer/injector (this brief's subject).
+- **`rosetta`** (engine for `show` / `inject` / `eject`) — the analyzer/injector (this brief's subject).
 - **`concordance`** (engine for `search`) — the prompt-search tool: a directory argument and
   fragment/exact search modes. See `briefs/concordance-search.md`.
 - **`palimpsest`** (engine for `scrub`) — reduces a ComfyUI PNG to an anonymized structural skeleton,
