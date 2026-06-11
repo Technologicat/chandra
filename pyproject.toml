@@ -72,6 +72,11 @@ dev = [
     "pyyaml>=6.0.3",           # validate .github/workflows/*.yml from the dev venv
 ]
 
+[tool.coverage.run]
+source = ["chandra"]   # measure production code only — not the tests themselves
+branch = true          # branch coverage (recommended by codecov.io)
+omit = ["*/tests/*"]
+
 [tool.ruff]
 line-length = 130
 target-version = "py311"

@@ -1,0 +1,38 @@
+# Measure test coverage on pushes to main and upload the report to Codecov.
+
+name: Coverage
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  codecov:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.13"
+    - name: Install PDM
+      run: |
+        python -m pip install --upgrade pip
+        pip install pdm
+    - name: Install dependencies
+      run: |
+        pdm python install 3.13
+        pdm install
+    - name: Generate coverage report
+      run: |
+        pdm run coverage run -m pytest tests/
+        pdm run coverage xml
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v6
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+        flags: unittests

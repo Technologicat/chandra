@@ -1,0 +1,88 @@
+# Install dependencies, lint, and run the test suite across the supported Python versions;
+# on a version tag, build the sdist + wheel and publish to PyPI via trusted publishing.
+#
+# Customized for chandra: pure-Python, installed with PDM, linted with the local ruff config.
+
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+    tags: ["*"]            # any tag triggers the publish job (chandra has no fixed tag prefix yet)
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash        # consistent shell across OSes (PDM/pytest invocations are identical)
+    strategy:
+      fail-fast: false
+      matrix:
+        # Full CPython matrix on Linux; newest CPython also on macOS and Windows. chandra is pure
+        # Python but cross-platform by design (e.g. $CHANDRA_MODELS_DIR uses os.pathsep, ':' vs ';'),
+        # so the macOS/Windows spot-checks guard the path-handling that only differs off Linux.
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install PDM
+      run: |
+        python -m pip install --upgrade pip
+        pip install pdm
+    - name: Create in-project virtualenv and install dependencies
+      run: |
+        pdm python install ${{ matrix.python-version }}
+        pdm install
+    - name: Lint with ruff
+      run: pdm run ruff check . --ignore SIM103
+    - name: Lint advisories (non-blocking)
+      run: pdm run ruff check . --select SIM103 || true
+    - name: Run tests
+      run: pdm run pytest tests/ -v
+
+  build-dist:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - run: pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-dist
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write          # OpenID Connect token for PyPI trusted publishing (no API token)
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
