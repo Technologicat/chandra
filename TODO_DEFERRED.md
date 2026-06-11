@@ -9,3 +9,10 @@ behavior, and no Pix setting was found to disable it. Investigate whether our XM
 shaped to avoid triggering Pix's sidecar cache (or document it as expected Pix behavior).
 
 Discovered during live testing (2026-06-11).
+
+## Review the first Dependabot PR (github-actions bumps)
+
+Dependabot opened a PR before the Windows test fix landed, so its CI may be red against the
+pre-fix base. Rebase/update it onto current `main` and confirm CI is green before merging.
+
+Noted 2026-06-11.
