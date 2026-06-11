@@ -1,6 +1,6 @@
 # Authors
 
-*Both human and AI authors are listed here — this project is substrate-independently coauthored.*
+*By fleet policy, both human and AI authors are listed.*
 
 Juha Jeronen (@Technologicat):
 

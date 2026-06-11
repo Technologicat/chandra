@@ -2,6 +2,12 @@
 
 Tools for working with the metadata that AI image generators embed in their output.
 
+For my stance on AI contributions, see the [collaboration guidelines](https://github.com/Technologicat/substrate-independent/blob/main/collaboration.md).
+
+We use [semantic versioning](https://semver.org/).
+
+## Overview
+
 Everything is one command, **`chandra`**, with these subcommands:
 
 | Command | What it does |
@@ -34,12 +40,14 @@ ask for paths. The one convenience is that `search` (once it has terms) defaults
 the current directory; the writing commands never default to the cwd — so a bare `chandra inject` or
 `chandra eject` can't modify files there by surprise.
 
-Why this is useful: CivitAI and SD Prompt Reader both mostly *punt* on analyzing ComfyUI workflows —
-a trivial txt2img graph is sometimes captured, but img2img, inpaint, edit-mode, LoRA chains, and
-non-standard loaders are not. `chandra` walks the embedded ComfyUI graph itself, reconstructs the
-recipe, and re-expresses it in the one format those tools read robustly.
+Why this is useful: many services and apps such as CivitAI and SD Prompt Reader mostly *punt* on
+analyzing ComfyUI workflows — a trivial txt2img graph is sometimes captured, but img2img, inpaint,
+edit-mode, LoRA chains, and non-standard loaders are not. `chandra` walks the embedded ComfyUI graph
+itself, reconstructs the recipe, and re-expresses it in the one format those tools read robustly.
 
-## Linking resources on CivitAI (`--hash`)
+## Injecting metadata (`inject`)
+
+### Auto-linking resources on CivitAI (`--hash`)
 
 By default the checkpoint and LoRAs are named as plain text — readable by a human and by SD Prompt
 Reader, but invisible to CivitAI, which keys its resource detection off hashes and surfaces nothing
@@ -51,18 +59,20 @@ corresponding resource pages on upload:
 chandra inject *.png --hash --models-dir ~/ComfyUI/models
 ```
 
-Hashing needs the actual files, so tell `chandra` where they live — either with `--models-dir DIR`
-(repeatable) or via the **`CHANDRA_MODELS_DIR`** environment variable, a `PATH`-style list of
-directories (colon-separated on Linux/macOS, semicolon on Windows):
+Hashing needs the actual files, so you need to tell `chandra` where they live — either with
+`--models-dir DIR` (repeatable) or via the **`CHANDRA_MODELS_DIR`** environment variable,
+a `PATH`-style list of directories (colon-separated on Linux/macOS, semicolon on Windows):
 
 ```bash
 export CHANDRA_MODELS_DIR=~/ComfyUI/models:~/extra/loras
 chandra inject *.png --hash          # picks up the dirs from the environment
 ```
 
+On Linux, to set the environment variable persistently, place the `export` command in your `.bashrc`.
+
 The directories are indexed once and hashes are cached (keyed by path, size, and mtime), so a
-multi-GB checkpoint shared across a batch is hashed only the first time. (Only the checkpoint and
-LoRAs link on CivitAI — its detection covers nothing else.)
+multi-GB checkpoint shared across a batch is hashed only the first time. Only the checkpoint and
+LoRAs auto-link on CivitAI — its detection covers nothing else.
 
 The recipe also records the **VAE** (`VAE:`, plus `VAE hash:` under `--hash`) and any separate
 **text encoders** — common on modern models (Flux, Qwen, …), often an LLM — as SD-Forge `Module N`
@@ -70,7 +80,7 @@ fields. CivitAI ignores both, but they're standard, faithful metadata that SD Pr
 image viewers, and `chandra show --recipe` display; the text encoder in particular materially shapes
 the result, so it's worth recording. Text encoders aren't hashed (no standard infotext hash field).
 
-## Seeing the recipe in a general image viewer
+### Seeing the recipe in a general image viewer
 
 `inject` also embeds a clean, human-readable rendering of the recipe — the same information as
 `chandra show --recipe` — as an XMP `dc:description`. So a general image viewer that reads standard
@@ -82,16 +92,18 @@ lossless — the original ComfyUI `prompt`/`workflow` chunks are never touched.
 
 LoRAs differ between the layers, by design. The machine `parameters` chunk renders them in A1111's
 inline `<lora:name:strength>` notation — that's the format's idiom, and the only standard place a
-LoRA's *strength* is recorded there. ComfyUI itself never writes LoRAs into the prompt text, so the
-human-readable views keep the prose clean and list them separately (`LoRA: name (strength X)` in the
-description and `chandra show --recipe`). The inline form lives only where it's an interchange
-convention; it's never presented as how the source tool wrote your prompt.
+LoRA's *strength* is recorded.
+
+ComfyUI itself never writes LoRAs into the prompt text, so the human-readable views keep the prose
+clean and list them separately (`LoRA: name (strength X)` in the description and `chandra show --recipe`).
+The inlined-into-prompt form is a data interchange convention.
 
 ## Undoing an inject (`eject`)
 
 Changed your mind? `chandra eject` is the inverse of `inject`: it removes the `parameters` chunk and
 the XMP description, leaving the original ComfyUI `prompt`/`workflow` chunks byte-for-byte intact — an
-`inject` followed by an `eject` restores the file exactly.
+`inject` followed by an `eject` restores the file exactly (byte-identical to the original, with the
+same `md5sum`).
 
 ```bash
 chandra eject *.png            # remove chandra's metadata from a batch, in place
@@ -104,27 +116,28 @@ XMP caption some other tool added. Two flags adjust that: `--no-xmp` removes onl
 chunk and leaves the XMP description; `--force` removes the `parameters` chunk and XMP regardless of
 who wrote them.
 
-## Searching
+## Searching (`search`)
 
 `chandra search` builds boolean queries from three primitives — no special syntax or metacharacters:
 
 | | flag | example |
 |---|---|---|
 | **AND** | *(default)* | `chandra search cat photo` — prompt contains both fragments |
-| **OR**  | `--any` (`--or`) | `chandra search --any captain admiral` — either fragment |
-| **NOT** | `-v` (`--invert`, `--not`) | `chandra search -v klingon` — prompt lacks the fragment |
+| **OR**  | `--or` (`--any`) | `chandra search --or captain admiral` — either fragment |
+| **NOT** | `--not` (`--invert`, `-v`) | `chandra search --not klingon` — prompt lacks the fragment |
 
-Fragments match as **substrings**, order-independent (`cat photo` also matches `photocatalytic`), and
-are **smart-cased**: an all-lowercase fragment is case-insensitive, a fragment with any uppercase
-letter is case-sensitive (`-i` forces insensitive).
+Fragments match as **substrings**, order-independent: `cat photo` also matches `photocatalytic`.
 
-It's a Unix filter — matching paths go to stdout, and when input is piped it reads candidate paths
-from stdin. So **chaining refines**: each stage filters the previous stage's results (set
-intersection), which gives full boolean in conjunctive normal form:
+Fragments are **smart-cased**: an all-lowercase fragment is case-insensitive, a fragment with
+any uppercase letter is case-sensitive. The flag `-i` forces case-insensitive.
+
+`chandra search` is a *nix-style filter — matching paths go to stdout, and when input is piped,
+it reads candidate paths from stdin. So **chaining refines**: each stage filters the previous
+stage's results (set intersection), which gives full boolean in conjunctive normal form:
 
 ```bash
-chandra search starship | chandra search --any captain admiral | chandra search -v klingon
-#  →  starship AND (captain OR admiral) AND NOT klingon
+chandra search starship | chandra search --or captain admiral | chandra search --not klingon
+#  →  starship AND (captain OR admiral) AND (NOT klingon)
 ```
 
 …and results compose with the rest of the shell:
@@ -135,10 +148,13 @@ chandra search cat -d imgs | xargs -d'\n' cp -t picks/     # copy matches elsewh
 chandra search catgirl -d imgs | fzf                       # pick one interactively
 ```
 
-More flags: `-p` / `-n` (search the positive / negative prompt only), `--exact` (match the whole
-query as one contiguous phrase instead of fragments), `-C` / `--context` (print a highlighted snippet
-of each match, colorized on a terminal), `--dirs-only` (print matching directories instead of files),
-`-d DIR` (search roots, repeatable; default is piped stdin, else the current directory).
+More flags:
+
+- `-p` / `-n` search the positive / negative prompt only,
+- `--exact` matches the whole query as one contiguous phrase instead of fragments),
+- `-C` / `--context` prints a highlighted snippet of each match, colorized on a terminal,
+- `--dirs-only` prints matching directories instead of files, and
+- `-d DIR` sets the search roots, repeatable; default is piped stdin, else the current directory.
 
 ## On the names
 
@@ -146,13 +162,11 @@ of each match, colorized on a terminal), `--dirs-only` (print matching directori
 recovers is an image's nocturnal layer — dimmer than the bright pixels, easy to overlook, but there
 to be read once you look for it. The name rewards a second glance: the astrophysicist *Subrahmanyan
 Chandrasekhar* (of the [Chandrasekhar limit](https://en.wikipedia.org/wiki/Chandrasekhar_limit))
-carries the same root — *Chandra·shekhar*, "moon-crested" — and NASA's
-[Chandra X-ray Observatory](https://en.wikipedia.org/wiki/Chandra_X-ray_Observatory), named in his
-honour, exists to image the **invisible** sky. Reading what's present but unseen is the whole job.
+carries the same root — *Chandra·shekhar*, "moon-crested". No relation to the [X-ray Observatory](https://en.wikipedia.org/wiki/Chandra_X-ray_Observatory).
 
-The two engines under the hood keep their own names (you'll meet them in the source):
+The engines under the hood carry their own names:
 
-- **`rosetta`** powers `show` and `inject`. Named for the
+- **`rosetta`** powers `show`, `inject`, and `eject`. Named for the
   [Rosetta Stone](https://en.wikipedia.org/wiki/Rosetta_Stone), which carries one message in several
   scripts so a reader of any one of them can understand it. This engine does the same for a
   generation recipe: it takes what ComfyUI wrote in its own dialect and re-expresses it in the
@@ -164,6 +178,18 @@ The two engines under the hood keep their own names (you'll meet them in the sou
   concordances are the classic examples. Searching the prompts across a folder of images is the same
   operation over a corpus of pictures. It only reads — its report goes to your terminal, never into
   the files — which is why it isn't called `scribe`.
+
+## Installation
+
+```bash
+pipx install chandra
+```
+
+If desired later; to uninstall:
+
+```bash
+pipx uninstall chandra
+```
 
 ## Shell completion (optional)
 
@@ -178,9 +204,11 @@ Open a new shell (or `source` the file) and `chandra <TAB>` will complete subcom
 
 `register-python-argcomplete` ships with argcomplete. If `chandra` is installed inside a virtualenv, the
 helper lives there too — to have it on `PATH` in every shell, install argcomplete globally with
-`pipx install argcomplete`. (The *global* `activate-global-python-argcomplete` hook does **not** pick
-up `chandra`: the installed console-script wrapper doesn't carry argcomplete's `# PYTHON_ARGCOMPLETE_OK`
-marker, so per-command registration as above is the reliable way.)
+`pipx install argcomplete`.
+
+The *global* `activate-global-python-argcomplete` hook does **not** pick up `chandra`: the installed
+console-script wrapper doesn't carry argcomplete's `# PYTHON_ARGCOMPLETE_OK` marker, so per-command
+registration as above is the reliable way.
 
 **To disable it:** remove the `eval` line from your shell rc — and, to drop it from the current
 shell immediately, run `complete -r chandra`. If you installed argcomplete solely for this,
@@ -189,11 +217,11 @@ shell immediately, run `complete -r chandra`. If you installed argcomplete solel
 ## Contributing
 
 Found a workflow `chandra` doesn't parse correctly? Bug reports (with an example image) and pull
-requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Two things up front: you can run
-`chandra scrub your.png` to produce an anonymized skeleton (no image, no prompt text, just the graph
-wiring that reproduces the bug) to attach instead of the original; and please keep any example images
-**SFW** (character art is fine), since the issue tracker is public.
+requests are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-## Design briefs
+Two things up front: you can run `chandra scrub your.png` to produce an anonymized skeleton
+(no image, no prompt text, just the graph wiring that reproduces the bug) to attach instead
+of the original; and please keep any example images **SFW** (character art is fine), since
+the issue tracker is public.
 
-The design briefs live under [`briefs/`](briefs/).
+If you are interested in the technical design, architectural briefs live under [`briefs/`](briefs/).
