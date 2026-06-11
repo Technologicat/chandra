@@ -88,7 +88,9 @@ def test_search_finds_matches(corpus, capsys):
 def test_search_recurses_subdirs(corpus, capsys):
     rc = cli.main(["search", "catgirl", "-d", str(corpus)])
     assert rc == 0
-    assert "sub/cat.png" in capsys.readouterr().out
+    # chandra emits native OS paths, so build the expected subdir fragment with the platform separator
+    # ('sub/cat.png' on POSIX, 'sub\\cat.png' on Windows).
+    assert str(Path("sub") / "cat.png") in capsys.readouterr().out
 
 
 def test_search_fragments_anded(corpus, capsys):
