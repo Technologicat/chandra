@@ -2,6 +2,10 @@
 
 Tools for working with the metadata that AI image generators embed in their output.
 
+![100% Python](https://img.shields.io/github/languages/top/Technologicat/chandra) ![supported language versions](https://img.shields.io/pypi/pyversions/chandra) ![supported implementations](https://img.shields.io/pypi/implementation/chandra) ![CI status](https://img.shields.io/github/actions/workflow/status/Technologicat/chandra/ci.yml?branch=main) [![codecov](https://codecov.io/gh/Technologicat/chandra/branch/main/graph/badge.svg)](https://codecov.io/gh/Technologicat/chandra)  
+![version on PyPI](https://img.shields.io/pypi/v/chandra) ![PyPI package format](https://img.shields.io/pypi/format/chandra) ![dependency status](https://img.shields.io/librariesio/github/Technologicat/chandra)  
+![license: BSD 2-Clause](https://img.shields.io/pypi/l/chandra) ![open issues](https://img.shields.io/github/issues/Technologicat/chandra) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](http://makeapullrequest.com/)
+
 For my stance on AI contributions, see the [collaboration guidelines](https://github.com/Technologicat/substrate-independent/blob/main/collaboration.md).
 
 We use [semantic versioning](https://semver.org/).
@@ -46,6 +50,12 @@ edit-mode, LoRA chains, and non-standard loaders are not. `chandra` walks the em
 itself, reconstructs the recipe, and re-expresses it in the one format those tools read robustly.
 
 ## Injecting metadata (`inject`)
+
+`inject` writes the recipe straight into the PNG, in place and losslessly — the original ComfyUI
+`prompt`/`workflow` chunks are never touched. It writes two independent layers, both on by default: a
+machine-readable A1111/SD-Forge `parameters` chunk (what CivitAI and SD Prompt Reader read) and an
+XMP `dc:description` (what general image viewers show). The two sections below cover what each layer
+is for — auto-linking your resources on CivitAI, and seeing the recipe in an everyday image viewer.
 
 ### Auto-linking resources on CivitAI (`--hash`)
 
@@ -151,7 +161,7 @@ chandra search catgirl -d imgs | fzf                       # pick one interactiv
 More flags:
 
 - `-p` / `-n` search the positive / negative prompt only,
-- `--exact` matches the whole query as one contiguous phrase instead of fragments),
+- `--exact` matches the whole query as one contiguous phrase instead of fragments,
 - `-C` / `--context` prints a highlighted snippet of each match, colorized on a terminal,
 - `--dirs-only` prints matching directories instead of files, and
 - `-d DIR` sets the search roots, repeatable; default is piped stdin, else the current directory.
@@ -162,7 +172,10 @@ More flags:
 recovers is an image's nocturnal layer — dimmer than the bright pixels, easy to overlook, but there
 to be read once you look for it. The name rewards a second glance: the astrophysicist *Subrahmanyan
 Chandrasekhar* (of the [Chandrasekhar limit](https://en.wikipedia.org/wiki/Chandrasekhar_limit))
-carries the same root — *Chandra·shekhar*, "moon-crested". No relation to the [X-ray Observatory](https://en.wikipedia.org/wiki/Chandra_X-ray_Observatory).
+carries the same root — *Chandra·shekhar*, "moon-crested" — as does NASA's
+[Chandra X-ray Observatory](https://en.wikipedia.org/wiki/Chandra_X-ray_Observatory), named in his
+honour, which exists to image the *invisible* sky. Reading what's present but unseen is the whole job.
+*(This project is not affiliated with or endorsed by NASA.)*
 
 The engines under the hood carry their own names:
 
@@ -179,13 +192,19 @@ The engines under the hood carry their own names:
   operation over a corpus of pictures. It only reads — its report goes to your terminal, never into
   the files — which is why it isn't called `scribe`.
 
+- **`palimpsest`** powers `scrub`. A [palimpsest](https://en.wikipedia.org/wiki/Palimpsest) is a
+  manuscript page whose original writing was scraped or washed off so the surface could be reused —
+  yet traces of the older text remain, legible to anyone who looks closely. `scrub` does the same to
+  an image: the picture and the prompt prose are washed away, but the graph's wiring stays behind —
+  enough to reproduce a parsing bug, without carrying anything personal.
+
 ## Installation
 
 ```bash
 pipx install chandra
 ```
 
-If desired later; to uninstall:
+And later, to uninstall:
 
 ```bash
 pipx uninstall chandra
