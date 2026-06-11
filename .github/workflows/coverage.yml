@@ -31,7 +31,7 @@ jobs:
         pdm run coverage run -m pytest tests/
         pdm run coverage xml
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./coverage.xml
