@@ -18,9 +18,11 @@ from . import TOOL_TAG, __version__
 
 __all__ = ["build"]
 
-# The XMP packet wrapper (XMP spec, part 1). The U+FEFF in the begin PI is the spec's byte-order
-# marker for the packet; end="w" marks the packet writable (in-place editable by other tools).
-_XPACKET_BEGIN = '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+# The XMP packet wrapper (XMP spec, part 1). The begin PI carries U+FEFF as the packet's byte-order
+# marker (it lets a reader detect the encoding); end="w" marks the packet writable (in-place editable
+# by other tools). Written as the `\uFEFF` escape on purpose: the bare character is invisible in most
+# editors and a stray whitespace-trim or copy-paste could strip it silently, malforming the packet.
+_XPACKET_BEGIN = '<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>'
 _XPACKET_END = '<?xpacket end="w"?>'
 
 
