@@ -1,6 +1,6 @@
 [project]
 name = "chandra"
-version = "0.1.1.dev0"
+version = "0.1.1"
 description = "Tools for working with the metadata that image generators embed in their output."
 authors = [{ name = "Juha Jeronen", email = "juha.jeronen@jamk.fi" }]
 readme = "README.md"
