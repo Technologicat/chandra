@@ -16,7 +16,7 @@ Everything is one command, **`chandra`**, with these subcommands:
 
 | Command | What it does |
 |---|---|
-| `chandra show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/[SD-Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) metadata that `chandra inject` *would* write. Read-only. |
+| `chandra show <png…>` | Read a ComfyUI image and **print** the [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui)/[SD-Forge](https://github.com/Haoming02/sd-webui-forge-classic) metadata that `chandra inject` *would* write. Read-only. |
 | `chandra inject <png…>` | **Write** that metadata into the image(s), in place, so they're recognized by services and apps that don't analyze ComfyUI graphs — notably, [CivitAI](https://civitai.com) on upload, and [SD Prompt Reader](https://github.com/receyuki/stable-diffusion-prompt-reader) locally. |
 | `chandra eject <png…>` | **Remove** that metadata again — the inverse of `inject`. Strips the `parameters` chunk and XMP description chandra wrote, leaving the original ComfyUI graph byte-intact. |
 | `chandra search <terms…>` | Search the prompts embedded across a directory tree of generated images. |

@@ -5,7 +5,7 @@
 Juha Jeronen (@Technologicat):
 
 - Author and maintainer: original concept, design, and architecture.
-- Domain expertise: the ComfyUI / [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui) / [SD-Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) metadata formats, the structure of ComfyUI workflow graphs, and CivitAI's resource auto-detection behavior (mapped by live testing).
+- Domain expertise: the ComfyUI / [AUTOMATIC1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui) / [SD-Forge](https://github.com/Haoming02/sd-webui-forge-classic) metadata formats, the structure of ComfyUI workflow graphs, and CivitAI's resource auto-detection behavior (mapped by live testing).
 - Direction, review of all AI-authored changesets, and live verification (CivitAI uploads, SD Prompt Reader, Pix).
 
 Claude Opus 4.8 (Anthropic), as AI pair programmer:
