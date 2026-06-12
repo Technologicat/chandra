@@ -18,6 +18,7 @@ negative); fields we couldn't resolve are omitted, never guessed.
 """
 
 from . import TOOL_TAG, __version__
+from .analyze import format_steps
 
 __all__ = ["synthesize"]
 
@@ -41,17 +42,6 @@ def _num(x) -> str:
     return str(x)
 
 
-def _steps(x) -> str:
-    """Steps is an integer count, but a dynamic-steps math chain can yield a fraction: an Evaluate
-    node computing e.g. 0.7 * 8 exposes the result on a typed INT output that applies `int()`
-    (truncation toward zero), so 5.6 reaches the sampler as 5. We resolve the arithmetic (5.6) but
-    not that per-output `int()`, so truncate here rather than round: the truncated value matches the
-    step count that actually ran. Rounding would embed 6 — a count nothing ran. Whatever integer we
-    embed is what CivitAI displays verbatim, so embedding the truncated value is what makes the
-    report correct."""
-    return str(int(float(x)))
-
-
 def synthesize(recipe, version: str = None) -> str:
     """Render `recipe` as an A1111/SD-Forge `parameters` string."""
     if version is None:
@@ -72,7 +62,7 @@ def synthesize(recipe, version: str = None) -> str:
     # Settings line. Steps must come first: SD Prompt Reader locates the block by "\nSteps:".
     settings = []
     if recipe.steps is not None:
-        settings.append(f"Steps: {_steps(recipe.steps)}")
+        settings.append(f"Steps: {format_steps(recipe.steps)}")
     if recipe.sampler_name:
         settings.append(f"Sampler: {recipe.sampler_name}")
     if recipe.scheduler:

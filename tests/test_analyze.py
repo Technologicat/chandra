@@ -249,3 +249,19 @@ def test_format_description_includes_loras_and_vae():
     out = analyze.format_description(r)
     assert "LoRA:     style.safetensors (strength 0.8)" in out
     assert "VAE:      ae.safetensors" in out
+
+
+def test_format_description_truncates_fractional_steps():
+    # A dynamic-steps Evaluate chain resolves to 5.6; the sampler's typed INT output truncates to 5,
+    # so both the parameters chunk and the XMP description must report 5 (the count that ran), agreeing.
+    r = Recipe(positive="x", seed=1, steps=5.6, cfg=4.5, sampler_name="euler", scheduler="normal",
+               model="m", width=8, height=8)
+    out = analyze.format_description(r)
+    assert "Steps: 5  " in out  # truncated, not 5.6 and not rounded to 6
+
+
+def test_format_steps_passes_through_non_numeric():
+    # Pathological graph: an unresolved steps value renders rather than crashing the description.
+    assert analyze.format_steps(None) == "None"
+    assert analyze.format_steps("?") == "?"
+    assert analyze.format_steps(5.6) == "5"

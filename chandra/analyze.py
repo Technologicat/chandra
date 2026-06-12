@@ -26,7 +26,7 @@ try:
 except ImportError:  # resolver degrades gracefully without it
     simple_eval = None
 
-__all__ = ["Lora", "Recipe", "analyze", "conditioning_roles", "format_recipe", "format_description"]
+__all__ = ["Lora", "Recipe", "analyze", "conditioning_roles", "format_steps", "format_recipe", "format_description"]
 
 _MAX_DEPTH = 64  # guard against cycles/pathological graphs (the graph is a DAG, but a file may lie)
 
@@ -393,6 +393,23 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
     return recipe
 
 
+def format_steps(x) -> str:
+    """Render a step count as the integer that actually ran.
+
+    Steps is an integer count, but a dynamic-steps math chain can yield a fraction: an Evaluate node
+    computing e.g. 0.7 * 8 exposes the result on a typed INT output that applies `int()` (truncation
+    toward zero), so 5.6 reaches the sampler as 5. We resolve the arithmetic (5.6) but not that
+    per-output `int()`, so truncate here rather than round: the truncated value matches the step count
+    that actually ran — rounding would report 6, a count nothing ran. Both the synthesized A1111
+    `parameters` (which CivitAI displays verbatim) and the XMP description render through here, so the
+    two agree. A non-numeric value (pathological graph) is passed through unchanged rather than
+    crashing the render."""
+    try:
+        return str(int(float(x)))
+    except (TypeError, ValueError):
+        return str(x)
+
+
 def format_recipe(recipe: Recipe) -> str:
     """A readable multi-line dump of a Recipe, for `chandra show --recipe`."""
     lines = []
@@ -444,7 +461,7 @@ def format_description(recipe: Recipe) -> str:
     for te in recipe.text_encoders:
         lines.append(f"Text enc: {te}")
     lines.append(f"Sampler:  {recipe.sampler_name} / {recipe.scheduler}")
-    lines.append(f"Steps: {recipe.steps}  CFG: {recipe.cfg}  Denoise: {recipe.denoise}  "
+    lines.append(f"Steps: {format_steps(recipe.steps)}  CFG: {recipe.cfg}  Denoise: {recipe.denoise}  "
                  f"Seed: {recipe.seed}")
     for w in recipe.warnings:
         lines.append(f"! {w}")
