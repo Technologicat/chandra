@@ -19,6 +19,10 @@ from chandra.rosetta import extract_recipe
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 FIXTURES = sorted(FIXTURES_DIR.glob("*.png"))
+# `tools-*` fixtures are non-generation workflows (background remover, pose detector): no sampler, no
+# recipe — just a pipeline of operations. They're held out of the gen assertions and tested below.
+GEN_FIXTURES = [p for p in FIXTURES if not p.name.startswith("tools-")]
+NONGEN_FIXTURES = [p for p in FIXTURES if p.name.startswith("tools-")]
 
 
 def test_fixtures_present():
@@ -29,7 +33,7 @@ def test_fixtures_present():
 # --------------------------------------------------------------------------------
 # The fixtures are properly anonymized (guards against committing a real image by mistake)
 
-@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GEN_FIXTURES, ids=lambda p: p.name)
 def test_fixture_is_a_scrubbed_skeleton(path):
     chunks = pngchunks.parse_file(path)
     types = [c.type for c in chunks]
@@ -48,7 +52,7 @@ def test_fixture_is_a_scrubbed_skeleton(path):
 # --------------------------------------------------------------------------------
 # Every fixture parses to a usable recipe and round-trips through synthesize
 
-@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", GEN_FIXTURES, ids=lambda p: p.name)
 def test_fixture_parses_and_synthesizes(path):
     recipe = extract_recipe(path)
     assert recipe.model                                 # a checkpoint/unet was resolved
@@ -56,6 +60,42 @@ def test_fixture_parses_and_synthesizes(path):
     assert recipe.width and recipe.height               # size from IHDR
     params = synthesize.synthesize(recipe)
     assert "Steps:" in params and "Model:" in params    # a valid A1111 parameters string
+
+
+# --------------------------------------------------------------------------------
+# Non-generation fixtures: no recipe, described by their operation pipeline (and still anonymized)
+
+@pytest.mark.parametrize("path", NONGEN_FIXTURES, ids=lambda p: p.name)
+def test_nongen_fixture_is_a_scrubbed_skeleton(path):
+    chunks = pngchunks.parse_file(path)
+    types = [c.type for c in chunks]
+    assert b"IDAT" not in types                         # no pixels
+    fields = pngchunks.text_fields(chunks)
+    assert "workflow" not in fields and "parameters" not in fields
+
+
+@pytest.mark.parametrize("path", NONGEN_FIXTURES, ids=lambda p: p.name)
+def test_nongen_fixture_describes_workflow(path):
+    recipe = extract_recipe(path)
+    assert recipe.sampler_class is None                 # recognized as a non-generation
+    assert recipe.model is None                         # no recipe was invented
+    assert recipe.operations[0] == "LoadImage"          # a pipeline from a source...
+    assert recipe.operations[-1] == "SaveImage"         # ...to a save sink
+    params = synthesize.synthesize(recipe)
+    assert params.startswith("ComfyUI workflow:")       # useful leading text for SDPR/CivitAI
+    assert "Version: chandra-rosetta" in params         # stamped, so eject round-trips it
+
+
+def test_nongen_pose_detector_pipeline():
+    # The DWPose fixture: a load → pose-estimate → save pipeline (structure survives scrubbing).
+    recipe = extract_recipe(FIXTURES_DIR / "tools-pose-detector.png")
+    assert recipe.operations == ["LoadImage", "DWPreprocessor", "SaveImage"]
+
+
+def test_nongen_rembg_pipeline():
+    # The Inspyrenet background-remover fixture: load → rembg → (mask→image) → save, saves last.
+    recipe = extract_recipe(FIXTURES_DIR / "tools-rembg.png")
+    assert recipe.operations == ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]
 
 
 # --------------------------------------------------------------------------------

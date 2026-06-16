@@ -15,6 +15,10 @@ from chandra.rosetta import extract_recipe
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 SAMPLES = sorted(SAMPLES_DIR.glob("*.png")) if SAMPLES_DIR.exists() else []
+# `tools-*` samples are non-generation workflows (background removers, pose detectors, …): they have
+# no recipe, so they're held out of the gen-analysis assertions and exercised by their own tests.
+GEN_SAMPLES = [p for p in SAMPLES if not p.name.startswith("tools-")]
+NONGEN_SAMPLES = [p for p in SAMPLES if p.name.startswith("tools-")]
 
 
 # --------------------------------------------------------------------------------
@@ -169,9 +173,77 @@ def test_no_sampler_warns():
 
 
 # --------------------------------------------------------------------------------
+# Non-generation workflows — no sampler, so no recipe; described by their operation pipeline instead.
+
+def _rembg_graph():
+    """A background-remover workflow shaped like the real `tools-rembg` sample: one load feeds a
+    rembg node whose two outputs (image, mask) fan out to two saves via a MaskToImage on the mask."""
+    return {
+        "35": {"class_type": "LoadImage", "inputs": {"image": "x"}},
+        "23": {"class_type": "InspyrenetRembg", "inputs": {"image": ["35", 0]}},
+        "30": {"class_type": "SaveImage", "inputs": {"images": ["23", 0]}},
+        "31": {"class_type": "MaskToImage", "inputs": {"mask": ["23", 1]}},
+        "33": {"class_type": "SaveImage", "inputs": {"images": ["31", 0]}},
+    }
+
+
+def test_describe_workflow_orders_sources_to_sinks():
+    # Pipeline order is by dependency depth, so the save sinks land last even though SaveImage(30)
+    # shares MaskToImage(31)'s depth — a flattened branch must not read "save then mask".
+    assert analyze.describe_workflow(_rembg_graph()) == \
+        ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]
+
+
+def test_describe_workflow_dedups_to_operation_types():
+    # Two SaveImage nodes collapse to one operation type (we describe what the workflow does, not
+    # how many times each op runs).
+    assert analyze.describe_workflow(_rembg_graph()).count("SaveImage") == 1
+
+
+def test_describe_workflow_is_cycle_safe():
+    # A file may lie about being a DAG; the description must still cover every node, not hang.
+    cyclic = {"a": {"class_type": "A", "inputs": {"x": ["b", 0]}},
+              "b": {"class_type": "B", "inputs": {"x": ["a", 0]}}}
+    assert sorted(analyze.describe_workflow(cyclic)) == ["A", "B"]
+
+
+def test_non_generation_recipe_has_operations_not_recipe():
+    r = analyze.analyze(_rembg_graph(), 896, 1152)
+    assert r.sampler_class is None and r.positive is None and r.model is None
+    assert r.operations == ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]
+
+
+def test_format_description_renders_non_gen_workflow():
+    # The crash regression: format_description must not blow up on a None positive, and a non-gen
+    # renders as a workflow description rather than an (empty) recipe.
+    r = analyze.analyze(_rembg_graph(), 896, 1152)
+    out = analyze.format_description(r)
+    assert "ComfyUI workflow (no generation recipe)" in out
+    assert "LoadImage → InspyrenetRembg → MaskToImage → SaveImage" in out
+    assert "Size:     896x1152" in out
+    assert "Positive:" not in out                       # not the recipe template
+
+
+def test_format_description_survives_gen_without_prompt():
+    # A degenerate *generation* (sampler found, prompt unresolvable) keeps the recipe template but
+    # must not crash on the None positive — the other half of the None-safety fix.
+    r = Recipe(sampler_class="KSampler", steps=20, sampler_name="euler", model="m", width=8, height=8)
+    out = analyze.format_description(r)                  # no exception
+    assert "Positive:" in out and "(unresolved)" in out
+
+
+@pytest.mark.parametrize("png", NONGEN_SAMPLES, ids=lambda p: p.name)
+def test_nongen_samples_describe_as_workflows(png):
+    r = extract_recipe(png)
+    assert r.sampler_class is None                       # recognized as a non-generation
+    assert r.operations and r.operations[-1] == "SaveImage"  # a pipeline ending at a save
+    assert analyze.format_description(r).startswith("ComfyUI workflow")  # renders, doesn't crash
+
+
+# --------------------------------------------------------------------------------
 # Integration over the real samples.
 
-@pytest.mark.parametrize("png", SAMPLES, ids=lambda p: p.name)
+@pytest.mark.parametrize("png", GEN_SAMPLES, ids=lambda p: p.name)
 def test_every_sample_fully_analyzes(png):
     r = extract_recipe(png)
     assert r.warnings == [], f"{png.name}: {r.warnings}"

@@ -408,6 +408,26 @@ keeps in the `workflow` (documenting model/quant choices) are preserved.
   non-Latin-1 content) and replace-either-form idempotency explicitly.
 - Integration test through SD Prompt Reader's parser as in *Verification plan* step 1.
 
+## Non-generation ComfyUI workflows
+
+Not every ComfyUI PNG is a generation. Background removers (`InspyrenetRembg`), pose detectors
+(`DWPreprocessor`), upscalers, and mask extractors all carry a `prompt` graph but have **no sampler**
+— so there's no recipe to reconstruct. These appear naturally in a directory of gens (you run a
+background remover over a render), so the analyzer must handle them rather than crash on them.
+
+The signal is clean: `_find_sampler` returns nothing, leaving `Recipe.sampler_class is None`. In that
+case `analyze` fills `Recipe.operations` with the workflow's distinct operation `class_type`s, ordered
+by dependency depth (`describe_workflow`) so the pipeline reads sources → transforms → sinks — e.g.
+`LoadImage → InspyrenetRembg → MaskToImage → SaveImage`. Synthesis then puts that pipeline in as the
+leading `parameters` text (so SD Prompt Reader / CivitAI display *something* rather than nothing) plus
+the `Size`/`Version` stamp, and the XMP description renders the same pipeline for general viewers.
+
+Two walkers, deliberately: the recipe extraction is a bundle of *semantic*, edge-typed traversals
+(follow `positive` conditioning, follow `model` through the LoRA chain), while the description is one
+*structural* traversal (every reachable node, topologically ordered). They answer different questions
+and don't collapse into one walk; the only genuinely shared primitive — reverse reachability
+(`_reachable`) — is factored out and used by both sink-picking and the description.
+
 ## Non-goals (v1)
 
 - No metadata for non-ComfyUI sources (we read ComfyUI `prompt`/`workflow`; A1111-origin images

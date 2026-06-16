@@ -22,6 +22,8 @@ from chandra.synthesize import synthesize
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "00_stuff"
 SAMPLES = sorted(SAMPLES_DIR.glob("*.png")) if SAMPLES_DIR.exists() else []
+# `tools-*` are non-generation workflows (no recipe) — held out of the gen-synthesis assertions.
+GEN_SAMPLES = [p for p in SAMPLES if not p.name.startswith("tools-")]
 
 
 def a1111_parse(raw):
@@ -132,10 +134,21 @@ def test_no_module_or_vae_fields_when_absent():
     assert "Module" not in s and "VAE" not in s   # a self-contained checkpoint emits neither
 
 
+def test_non_generation_synthesizes_workflow_pipeline():
+    # No sampler → no recipe. The operation pipeline becomes the leading prompt text so SDPR/CivitAI
+    # display something useful; Size and the Version stamp follow (the stamp is what `eject` keys on).
+    r = Recipe(operations=["LoadImage", "InspyrenetRembg", "SaveImage"], width=896, height=1152)
+    s = synthesize(r)
+    pos, neg, sett = a1111_parse(s)
+    assert s.startswith("ComfyUI workflow: LoadImage → InspyrenetRembg → SaveImage")
+    assert "Steps" not in sett and "Sampler" not in sett  # nothing fabricated
+    assert "Size: 896x1152" in s and "Version: chandra-rosetta" in s
+
+
 # --------------------------------------------------------------------------------
 # Integration: every sample synthesizes to SDPR-parseable output
 
-@pytest.mark.parametrize("png", SAMPLES, ids=lambda p: p.name)
+@pytest.mark.parametrize("png", GEN_SAMPLES, ids=lambda p: p.name)
 def test_sample_synthesis_parses_back(png):
     recipe = extract_recipe(png)
     raw = synthesize(recipe)

@@ -26,7 +26,8 @@ try:
 except ImportError:  # resolver degrades gracefully without it
     simple_eval = None
 
-__all__ = ["Lora", "Recipe", "analyze", "conditioning_roles", "format_steps", "format_recipe", "format_description"]
+__all__ = ["Lora", "Recipe", "analyze", "conditioning_roles", "describe_workflow",
+           "format_steps", "format_recipe", "format_description", "format_workflow_description"]
 
 _MAX_DEPTH = 64  # guard against cycles/pathological graphs (the graph is a DAG, but a file may lie)
 
@@ -64,6 +65,7 @@ class Recipe:
     width: Optional[int] = None
     height: Optional[int] = None
     sampler_class: Optional[str] = None
+    operations: list = field(default_factory=list)  # non-gen workflows: class_types in pipeline order
     warnings: list = field(default_factory=list)
 
 
@@ -142,8 +144,13 @@ def _resolve_string(graph, ref, depth=0):
 # --------------------------------------------------------------------------------
 # Graph navigation
 
-def _subgraph_size(graph, start_id):
-    """Count nodes reachable upstream from start_id (for picking the dominant sink)."""
+def _reachable(graph, start_id):
+    """The set of node ids reachable upstream from start_id, following every input link.
+
+    The one structural-traversal primitive: sink-picking measures subgraph size with it, and the
+    non-generation workflow description scopes itself with it. (The recipe walks — conditioning,
+    model, clip, vae — are *semantic*, edge-typed traversals, not this generic structural one.)
+    """
     seen, stack = set(), [start_id]
     while stack:
         nid = stack.pop()
@@ -153,7 +160,71 @@ def _subgraph_size(graph, start_id):
         for v in _inputs(graph[nid]).values():
             if _is_link(v):
                 stack.append(v[0])
-    return len(seen)
+    return seen
+
+
+def _subgraph_size(graph, start_id):
+    """Count nodes reachable upstream from start_id (for picking the dominant sink)."""
+    return len(_reachable(graph, start_id))
+
+
+def _topo_order(graph):
+    """Node ids in dependency order (sources first), tie-broken by id; cycle-safe (a file may lie).
+
+    Kahn's algorithm over the dependency DAG (an edge node→dep for each input link). On a cycle, the
+    nodes that never reach in-degree zero are appended in id order so the result still covers the graph.
+    """
+    deps = {nid: {v[0] for v in _inputs(node).values() if _is_link(v) and v[0] in graph}
+            for nid, node in graph.items()}
+    indeg = {nid: len(ds) for nid, ds in deps.items()}
+    succ = {nid: [] for nid in graph}
+    for nid, ds in deps.items():
+        for dep in ds:
+            succ[dep].append(nid)
+    ready = sorted(nid for nid, d in indeg.items() if d == 0)
+    order = []
+    while ready:
+        nid = ready.pop(0)
+        order.append(nid)
+        freed = []
+        for s in succ[nid]:
+            indeg[s] -= 1
+            if indeg[s] == 0:
+                freed.append(s)
+        ready.extend(sorted(freed))
+    if len(order) < len(graph):  # cycle: append the unresolved remainder deterministically
+        order += sorted(nid for nid in graph if nid not in order)
+    return order
+
+
+def describe_workflow(graph: dict) -> list:
+    """The workflow's operations as distinct ``class_type`` names, in pipeline order.
+
+    For ComfyUI images that aren't generations (no sampler) — background removers, pose detectors,
+    upscalers, mask extractors — there is no recipe to extract, but the graph is still a meaningful
+    pipeline of named operations. Returns the operation class_types ordered by dependency depth
+    (longest chain from a source), deduplicated to operation *types* (not a per-node tally). Ordering
+    by depth rather than raw topological position keeps sinks last even when a parallel branch (e.g. a
+    mask side-output) shares their depth — so the pipeline reads sources → transforms → outputs.
+    Empty for an empty graph.
+    """
+    order = _topo_order(graph)  # deps precede dependents, so depth can be filled in one pass
+    depth = {}
+    for nid in order:
+        deps = [v[0] for v in _inputs(graph[nid]).values() if _is_link(v) and v[0] in graph]
+        # `.get(d, 0)`: deps precede dependents in a DAG, but on a cycle a back-edge points at a
+        # not-yet-seen node — treat it as depth 0 rather than crashing (a file may lie about its DAG).
+        depth[nid] = 1 + max((depth.get(d, 0) for d in deps), default=-1)  # sources → 0
+    info = {}  # class_type -> [max depth among its nodes, first appearance position]
+    for pos, nid in enumerate(order):
+        ct = graph[nid].get("class_type")
+        if not ct:
+            continue
+        if ct in info:
+            info[ct][0] = max(info[ct][0], depth[nid])
+        else:
+            info[ct] = [depth[nid], pos]
+    return [ct for ct, _ in sorted(info.items(), key=lambda kv: tuple(kv[1]))]
 
 
 def _pick_sink(graph, warnings):
@@ -358,9 +429,11 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
 
     sink_id = _pick_sink(graph, recipe.warnings)
     if sink_id is None:
+        recipe.operations = describe_workflow(graph)  # not a generation — describe the pipeline instead
         return recipe
     sampler_id = _find_sampler(graph, sink_id, recipe.warnings)
     if sampler_id is None:
+        recipe.operations = describe_workflow(graph)  # not a generation — describe the pipeline instead
         return recipe
 
     sampler = graph[sampler_id]
@@ -431,6 +504,8 @@ def format_recipe(recipe: Recipe) -> str:
                  f"({recipe.sampler_class})")
     lines.append(f"steps:    {recipe.steps}   cfg: {recipe.cfg}   denoise: {recipe.denoise}   "
                  f"seed: {recipe.seed}")
+    if recipe.operations:  # non-generation workflow: the operation pipeline
+        lines.append(f"workflow: {' → '.join(recipe.operations)}")
     for w in recipe.warnings:
         lines.append(f"  ! {w}")
     return "\n".join(lines)
@@ -443,8 +518,13 @@ def format_description(recipe: Recipe) -> str:
     the prompts as real text with real line breaks — so it reads naturally as the "Description"
     caption a general image viewer (Pix, etc.) shows. Empty sections (no negative, no VAE, no LoRAs)
     are omitted rather than shown blank.
+
+    A ComfyUI image that isn't a generation (no sampler) has no recipe; it renders as a workflow
+    description instead (see `format_workflow_description`).
     """
-    lines = ["Positive:", recipe.positive]
+    if recipe.sampler_class is None and recipe.operations:
+        return format_workflow_description(recipe)
+    lines = ["Positive:", recipe.positive or "(unresolved)"]
     if recipe.negative:
         lines += ["", "Negative:", recipe.negative]
     lines.append("")
@@ -465,4 +545,18 @@ def format_description(recipe: Recipe) -> str:
                  f"Seed: {recipe.seed}")
     for w in recipe.warnings:
         lines.append(f"! {w}")
+    return "\n".join(lines)
+
+
+def format_workflow_description(recipe: Recipe) -> str:
+    """A clean, human-readable description of a non-generation ComfyUI workflow, for embedding.
+
+    Counterpart to `format_description` for the case where the graph has no sampler (a background
+    remover, pose detector, upscaler, …): there's no recipe, but the operation pipeline is itself the
+    description. The "no sampler" warning is expected here, not an anomaly, so it's omitted.
+    """
+    lines = ["ComfyUI workflow (no generation recipe)", "",
+             "Operations:", " → ".join(recipe.operations)]
+    if recipe.width and recipe.height:
+        lines += ["", f"Size:     {recipe.width}x{recipe.height}"]
     return "\n".join(lines)
