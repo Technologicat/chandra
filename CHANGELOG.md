@@ -12,10 +12,17 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 - ComfyUI images that aren't generations — background removers, pose detectors, upscalers, mask
   extractors, anything with no sampler — are now handled instead of rejected. There's no recipe to
-  extract, so `chandra show`/`inject` describe the workflow's operation pipeline (e.g.
-  `LoadImage → InspyrenetRembg → MaskToImage → SaveImage`) and embed that as both the `parameters`
-  text and the XMP description, so SD Prompt Reader / CivitAI and general viewers (Pix) show
-  something useful rather than nothing.
+  extract, so `chandra show`/`inject` describe the workflow's operation pipeline — one line per
+  output image, since one workflow can write several (a background remover emits both the cut-out and
+  its mask, by different paths):
+
+  ```
+  LoadImage → InspyrenetRembg → SaveImage
+  LoadImage → InspyrenetRembg → MaskToImage → SaveImage
+  ```
+
+  That goes into both the `parameters` text and the XMP description, so SD Prompt Reader / CivitAI and
+  general viewers (Pix) show something useful rather than nothing.
 
 ### Fixed
 

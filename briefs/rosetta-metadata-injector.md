@@ -416,17 +416,35 @@ Not every ComfyUI PNG is a generation. Background removers (`InspyrenetRembg`), 
 background remover over a render), so the analyzer must handle them rather than crash on them.
 
 The signal is clean: `_find_sampler` returns nothing, leaving `Recipe.sampler_class is None`. In that
-case `analyze` fills `Recipe.operations` with the workflow's distinct operation `class_type`s, ordered
-by dependency depth (`describe_workflow`) so the pipeline reads sources → transforms → sinks — e.g.
-`LoadImage → InspyrenetRembg → MaskToImage → SaveImage`. Synthesis then puts that pipeline in as the
-leading `parameters` text (so SD Prompt Reader / CivitAI display *something* rather than nothing) plus
-the `Size`/`Version` stamp, and the XMP description renders the same pipeline for general viewers.
+case `analyze` fills `Recipe.pipelines` (`describe_workflow`) with **one pipeline per output image** —
+a workflow commonly writes several by branching to several sinks, and an operation sits on some
+branches but not others, so flattening the whole graph into one line would misreport (the mask
+conversion is on the mask output's path, not the cut-out's). Each pipeline is the distinct operation
+`class_type`s upstream of one sink, ordered by dependency depth so it reads sources → transforms →
+sink:
+
+```
+LoadImage → InspyrenetRembg → SaveImage                 # the cut-out
+LoadImage → InspyrenetRembg → MaskToImage → SaveImage   # the mask
+```
+
+Synthesis puts these in as the leading `parameters` text (so SD Prompt Reader / CivitAI display
+*something* rather than nothing) plus the `Size`/`Version` stamp, and the XMP renders the same lines
+for general viewers. Cost is `O(sinks × subgraph)` — we scope each sink with reverse reachability and
+dedup, *not* enumerate root→sink paths (which would blow up combinatorially on merge/diamond
+topologies). Sinks number 2–3 in practice.
+
+The description deliberately stays *structural* — operation `class_type`s only, never the
+`SaveImage` `filename_prefix`. That field is user-controlled free text (it can carry usernames,
+absolute paths, project codenames), which is exactly why `scrub` neutralizes it; the description
+mirrors that same privacy boundary (`class_type`s and model names are public/structural, free text is
+not).
 
 Two walkers, deliberately: the recipe extraction is a bundle of *semantic*, edge-typed traversals
 (follow `positive` conditioning, follow `model` through the LoRA chain), while the description is one
-*structural* traversal (every reachable node, topologically ordered). They answer different questions
-and don't collapse into one walk; the only genuinely shared primitive — reverse reachability
-(`_reachable`) — is factored out and used by both sink-picking and the description.
+*structural* traversal (reachable nodes, depth-ordered). They answer different questions and don't
+collapse into one walk; the only genuinely shared primitive — reverse reachability (`_reachable`) — is
+factored out and used by both sink-picking and the per-output description.
 
 ## Non-goals (v1)
 

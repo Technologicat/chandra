@@ -187,39 +187,54 @@ def _rembg_graph():
     }
 
 
-def test_describe_workflow_orders_sources_to_sinks():
-    # Pipeline order is by dependency depth, so the save sinks land last even though SaveImage(30)
-    # shares MaskToImage(31)'s depth — a flattened branch must not read "save then mask".
-    assert analyze.describe_workflow(_rembg_graph()) == \
-        ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]
+def test_describe_workflow_reports_one_pipeline_per_output():
+    # Two sinks → two pipelines. Honest reporting: the cut-out save's path does NOT include
+    # MaskToImage (that op only feeds the mask save), so we must not flatten both into one line.
+    assert analyze.describe_workflow(_rembg_graph()) == [
+        ["LoadImage", "InspyrenetRembg", "SaveImage"],                  # the RGB cut-out output
+        ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"],   # the mask output
+    ]
 
 
-def test_describe_workflow_dedups_to_operation_types():
-    # Two SaveImage nodes collapse to one operation type (we describe what the workflow does, not
-    # how many times each op runs).
-    assert analyze.describe_workflow(_rembg_graph()).count("SaveImage") == 1
+def test_describe_workflow_orders_each_pipeline_sources_to_sink():
+    # Within a pipeline, ops are depth-ordered so the save sink lands last (not mid-line).
+    mask_pipe = analyze.describe_workflow(_rembg_graph())[1]
+    assert mask_pipe[0] == "LoadImage" and mask_pipe[-1] == "SaveImage"
+
+
+def test_describe_workflow_dedups_to_operation_types_within_a_pipeline():
+    # A single output's pipeline lists each operation type once (what it does, not a per-node tally).
+    for pipe in analyze.describe_workflow(_rembg_graph()):
+        assert len(pipe) == len(set(pipe))
 
 
 def test_describe_workflow_is_cycle_safe():
-    # A file may lie about being a DAG; the description must still cover every node, not hang.
+    # A file may lie about being a DAG; with no terminal node it degrades to one whole-graph pipeline
+    # covering every node, rather than hanging or crashing.
     cyclic = {"a": {"class_type": "A", "inputs": {"x": ["b", 0]}},
               "b": {"class_type": "B", "inputs": {"x": ["a", 0]}}}
-    assert sorted(analyze.describe_workflow(cyclic)) == ["A", "B"]
+    result = analyze.describe_workflow(cyclic)
+    assert len(result) == 1 and sorted(result[0]) == ["A", "B"]
 
 
-def test_non_generation_recipe_has_operations_not_recipe():
+def test_non_generation_recipe_has_pipelines_not_recipe():
     r = analyze.analyze(_rembg_graph(), 896, 1152)
     assert r.sampler_class is None and r.positive is None and r.model is None
-    assert r.operations == ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]
+    assert r.pipelines == [
+        ["LoadImage", "InspyrenetRembg", "SaveImage"],
+        ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"],
+    ]
 
 
 def test_format_description_renders_non_gen_workflow():
     # The crash regression: format_description must not blow up on a None positive, and a non-gen
-    # renders as a workflow description rather than an (empty) recipe.
+    # renders one line per output rather than an (empty) recipe.
     r = analyze.analyze(_rembg_graph(), 896, 1152)
     out = analyze.format_description(r)
     assert "ComfyUI workflow (no generation recipe)" in out
-    assert "LoadImage → InspyrenetRembg → MaskToImage → SaveImage" in out
+    assert "Outputs (2):" in out
+    assert "LoadImage → InspyrenetRembg → SaveImage" in out               # the cut-out path...
+    assert "LoadImage → InspyrenetRembg → MaskToImage → SaveImage" in out  # ...and the mask path
     assert "Size:     896x1152" in out
     assert "Positive:" not in out                       # not the recipe template
 
@@ -236,7 +251,7 @@ def test_format_description_survives_gen_without_prompt():
 def test_nongen_samples_describe_as_workflows(png):
     r = extract_recipe(png)
     assert r.sampler_class is None                       # recognized as a non-generation
-    assert r.operations and r.operations[-1] == "SaveImage"  # a pipeline ending at a save
+    assert r.pipelines and all(p[-1] == "SaveImage" for p in r.pipelines)  # each output ends at a save
     assert analyze.format_description(r).startswith("ComfyUI workflow")  # renders, doesn't crash
 
 

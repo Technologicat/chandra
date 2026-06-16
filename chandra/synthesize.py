@@ -45,11 +45,16 @@ def _num(x) -> str:
 def _synthesize_workflow(recipe, version: str) -> str:
     """A minimal `parameters` string for a non-generation ComfyUI workflow (no sampler).
 
-    There's no recipe, but the operation pipeline goes in as the leading text so SD Prompt Reader /
-    CivitAI display something useful rather than nothing; `Size` and the `Version` stamp follow (the
-    latter is what lets `eject` recognize the chunk as chandra's and round-trip it away).
+    There's no recipe, but the operation pipelines go in as the leading text (one line per output
+    image) so SD Prompt Reader / CivitAI display something useful rather than nothing; `Size` and the
+    `Version` stamp follow (the latter is what lets `eject` recognize the chunk as chandra's and
+    round-trip it away).
     """
-    lines = ["ComfyUI workflow: " + " → ".join(recipe.operations)]
+    rendered = [" → ".join(pipe) for pipe in recipe.pipelines]
+    if len(rendered) == 1:
+        lines = ["ComfyUI workflow: " + rendered[0]]
+    else:
+        lines = ["ComfyUI workflow:", *rendered]
     settings = []
     if recipe.width and recipe.height:
         settings.append(f"Size: {recipe.width}x{recipe.height}")
@@ -63,7 +68,7 @@ def synthesize(recipe, version: str = None) -> str:
     if version is None:
         version = __version__
 
-    if recipe.sampler_class is None and recipe.operations:  # not a generation — describe the workflow
+    if recipe.sampler_class is None and recipe.pipelines:  # not a generation — describe the workflow
         return _synthesize_workflow(recipe, version)
 
     # Positive prompt, with any LoRAs expressed in A1111's inline `<lora:name:weight>` idiom

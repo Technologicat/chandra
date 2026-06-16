@@ -65,7 +65,7 @@ class Recipe:
     width: Optional[int] = None
     height: Optional[int] = None
     sampler_class: Optional[str] = None
-    operations: list = field(default_factory=list)  # non-gen workflows: class_types in pipeline order
+    pipelines: list = field(default_factory=list)  # non-gen workflows: one op-class_type list per output
     warnings: list = field(default_factory=list)
 
 
@@ -197,34 +197,67 @@ def _topo_order(graph):
     return order
 
 
-def describe_workflow(graph: dict) -> list:
-    """The workflow's operations as distinct ``class_type`` names, in pipeline order.
-
-    For ComfyUI images that aren't generations (no sampler) — background removers, pose detectors,
-    upscalers, mask extractors — there is no recipe to extract, but the graph is still a meaningful
-    pipeline of named operations. Returns the operation class_types ordered by dependency depth
-    (longest chain from a source), deduplicated to operation *types* (not a per-node tally). Ordering
-    by depth rather than raw topological position keeps sinks last even when a parallel branch (e.g. a
-    mask side-output) shares their depth — so the pipeline reads sources → transforms → outputs.
-    Empty for an empty graph.
-    """
-    order = _topo_order(graph)  # deps precede dependents, so depth can be filled in one pass
+def _node_depths(graph):
+    """Longest-dependency-chain depth per node id (sources → 0). Cycle-safe."""
     depth = {}
-    for nid in order:
+    for nid in _topo_order(graph):  # deps precede dependents in a DAG, so one pass fills depth
         deps = [v[0] for v in _inputs(graph[nid]).values() if _is_link(v) and v[0] in graph]
-        # `.get(d, 0)`: deps precede dependents in a DAG, but on a cycle a back-edge points at a
-        # not-yet-seen node — treat it as depth 0 rather than crashing (a file may lie about its DAG).
-        depth[nid] = 1 + max((depth.get(d, 0) for d in deps), default=-1)  # sources → 0
-    info = {}  # class_type -> [max depth among its nodes, first appearance position]
-    for pos, nid in enumerate(order):
+        # `.get(d, 0)`: on a cycle a back-edge points at a not-yet-seen node — treat it as depth 0
+        # rather than crashing (a file may lie about being a DAG; the rest of the module guards too).
+        depth[nid] = 1 + max((depth.get(d, 0) for d in deps), default=-1)
+    return depth
+
+
+def _ops_in_depth_order(graph, node_ids, depth):
+    """The distinct ``class_type``s among node_ids, ordered by dependency depth.
+
+    Ordered by *max* depth per type (so a type that also occurs deep — typically a sink — sorts last,
+    even when a shallower node of the same type exists), ties broken by earliest ``(depth, id)``. The
+    result reads sources → transforms → sink, deduplicated to operation types (not a per-node tally).
+    """
+    info = {}  # class_type -> [max depth among its nodes, earliest (depth, id) for a stable tie-break]
+    for nid in node_ids:
         ct = graph[nid].get("class_type")
         if not ct:
             continue
+        key = (depth[nid], nid)
         if ct in info:
             info[ct][0] = max(info[ct][0], depth[nid])
+            info[ct][1] = min(info[ct][1], key)
         else:
-            info[ct] = [depth[nid], pos]
-    return [ct for ct, _ in sorted(info.items(), key=lambda kv: tuple(kv[1]))]
+            info[ct] = [depth[nid], key]
+    return [ct for ct, _ in sorted(info.items(), key=lambda kv: (kv[1][0], kv[1][1]))]
+
+
+def describe_workflow(graph: dict) -> list:
+    """The workflow's operation pipelines — one per output image (sink) — as ``class_type`` names.
+
+    For ComfyUI images that aren't generations (no sampler) — background removers, pose detectors,
+    upscalers, mask extractors — there is no recipe to extract, but the graph is still a meaningful set
+    of pipelines, one per saved image. A workflow commonly writes several images by branching to
+    several sinks (a background remover emits both the cut-out and its mask), and a given operation
+    sits on some branches but not others. So we report each sink's *own* upstream path — honestly —
+    rather than flattening the whole graph into one line that would imply operations belong to outputs
+    they don't feed (the mask conversion is on the mask output's path, not the cut-out's).
+
+    Each pipeline is the distinct operation class_types upstream of one sink (via the shared
+    `_reachable` primitive), ordered by dependency depth and deduplicated to operation types. Sinks are
+    the terminal nodes — those nothing else consumes. Pipelines are returned shortest-first for stable
+    output; identical pipelines from sibling sinks are kept (two outputs made the same way are still
+    two outputs). A graph with no terminal (a cycle — a file may lie) degrades to one whole-graph
+    pipeline. Empty for an empty graph.
+    """
+    if not graph:
+        return []
+    depth = _node_depths(graph)
+    referenced = {v[0] for node in graph.values() for v in _inputs(node).values()
+                  if _is_link(v) and v[0] in graph}
+    sinks = [nid for nid in graph if nid not in referenced]
+    if not sinks:  # every node feeds another → cyclic; describe the whole graph as one pipeline
+        return [_ops_in_depth_order(graph, list(graph), depth)]
+    pipelines = [_ops_in_depth_order(graph, _reachable(graph, sink), depth) for sink in sinks]
+    pipelines.sort(key=lambda p: (len(p), p))
+    return pipelines
 
 
 def _pick_sink(graph, warnings):
@@ -429,11 +462,11 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
 
     sink_id = _pick_sink(graph, recipe.warnings)
     if sink_id is None:
-        recipe.operations = describe_workflow(graph)  # not a generation — describe the pipeline instead
+        recipe.pipelines = describe_workflow(graph)  # not a generation — describe the pipelines instead
         return recipe
     sampler_id = _find_sampler(graph, sink_id, recipe.warnings)
     if sampler_id is None:
-        recipe.operations = describe_workflow(graph)  # not a generation — describe the pipeline instead
+        recipe.pipelines = describe_workflow(graph)  # not a generation — describe the pipelines instead
         return recipe
 
     sampler = graph[sampler_id]
@@ -504,8 +537,8 @@ def format_recipe(recipe: Recipe) -> str:
                  f"({recipe.sampler_class})")
     lines.append(f"steps:    {recipe.steps}   cfg: {recipe.cfg}   denoise: {recipe.denoise}   "
                  f"seed: {recipe.seed}")
-    if recipe.operations:  # non-generation workflow: the operation pipeline
-        lines.append(f"workflow: {' → '.join(recipe.operations)}")
+    for pipe in recipe.pipelines:  # non-generation workflow: one pipeline per output image
+        lines.append(f"output:   {' → '.join(pipe)}")
     for w in recipe.warnings:
         lines.append(f"  ! {w}")
     return "\n".join(lines)
@@ -522,7 +555,7 @@ def format_description(recipe: Recipe) -> str:
     A ComfyUI image that isn't a generation (no sampler) has no recipe; it renders as a workflow
     description instead (see `format_workflow_description`).
     """
-    if recipe.sampler_class is None and recipe.operations:
+    if recipe.sampler_class is None and recipe.pipelines:
         return format_workflow_description(recipe)
     lines = ["Positive:", recipe.positive or "(unresolved)"]
     if recipe.negative:
@@ -552,11 +585,13 @@ def format_workflow_description(recipe: Recipe) -> str:
     """A clean, human-readable description of a non-generation ComfyUI workflow, for embedding.
 
     Counterpart to `format_description` for the case where the graph has no sampler (a background
-    remover, pose detector, upscaler, …): there's no recipe, but the operation pipeline is itself the
-    description. The "no sampler" warning is expected here, not an anomaly, so it's omitted.
+    remover, pose detector, upscaler, …): there's no recipe, but the operation pipelines are the
+    description — one line per output image, so the viewer sees how many images the workflow wrote and
+    how each was made. The "no sampler" warning is expected here, not an anomaly, so it's omitted.
     """
-    lines = ["ComfyUI workflow (no generation recipe)", "",
-             "Operations:", " → ".join(recipe.operations)]
+    rendered = [" → ".join(pipe) for pipe in recipe.pipelines]
+    label = "Output:" if len(rendered) == 1 else f"Outputs ({len(rendered)}):"
+    lines = ["ComfyUI workflow (no generation recipe)", "", label, *rendered]
     if recipe.width and recipe.height:
         lines += ["", f"Size:     {recipe.width}x{recipe.height}"]
     return "\n".join(lines)

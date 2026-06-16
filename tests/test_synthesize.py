@@ -137,12 +137,23 @@ def test_no_module_or_vae_fields_when_absent():
 def test_non_generation_synthesizes_workflow_pipeline():
     # No sampler → no recipe. The operation pipeline becomes the leading prompt text so SDPR/CivitAI
     # display something useful; Size and the Version stamp follow (the stamp is what `eject` keys on).
-    r = Recipe(operations=["LoadImage", "InspyrenetRembg", "SaveImage"], width=896, height=1152)
+    r = Recipe(pipelines=[["LoadImage", "InspyrenetRembg", "SaveImage"]], width=896, height=1152)
     s = synthesize(r)
-    pos, neg, sett = a1111_parse(s)
+    _, _, sett = a1111_parse(s)
     assert s.startswith("ComfyUI workflow: LoadImage → InspyrenetRembg → SaveImage")
     assert "Steps" not in sett and "Sampler" not in sett  # nothing fabricated
     assert "Size: 896x1152" in s and "Version: chandra-rosetta" in s
+
+
+def test_non_generation_synthesizes_one_line_per_output():
+    # A workflow that writes two images (e.g. a background remover: cut-out + mask) reports both
+    # paths, one per line, so a reader sees it produced two images.
+    r = Recipe(pipelines=[["LoadImage", "InspyrenetRembg", "SaveImage"],
+                          ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]],
+               width=896, height=1152)
+    s = synthesize(r)
+    assert s.startswith("ComfyUI workflow:\nLoadImage → InspyrenetRembg → SaveImage\n")
+    assert "LoadImage → InspyrenetRembg → MaskToImage → SaveImage" in s
 
 
 # --------------------------------------------------------------------------------

@@ -79,23 +79,28 @@ def test_nongen_fixture_describes_workflow(path):
     recipe = extract_recipe(path)
     assert recipe.sampler_class is None                 # recognized as a non-generation
     assert recipe.model is None                         # no recipe was invented
-    assert recipe.operations[0] == "LoadImage"          # a pipeline from a source...
-    assert recipe.operations[-1] == "SaveImage"         # ...to a save sink
+    assert recipe.pipelines                             # at least one output pipeline
+    for pipe in recipe.pipelines:
+        assert pipe[0] == "LoadImage" and pipe[-1] == "SaveImage"  # source → … → save sink
     params = synthesize.synthesize(recipe)
     assert params.startswith("ComfyUI workflow:")       # useful leading text for SDPR/CivitAI
     assert "Version: chandra-rosetta" in params         # stamped, so eject round-trips it
 
 
 def test_nongen_pose_detector_pipeline():
-    # The DWPose fixture: a load → pose-estimate → save pipeline (structure survives scrubbing).
+    # The DWPose fixture: a single output, load → pose-estimate → save (structure survives scrubbing).
     recipe = extract_recipe(FIXTURES_DIR / "tools-pose-detector.png")
-    assert recipe.operations == ["LoadImage", "DWPreprocessor", "SaveImage"]
+    assert recipe.pipelines == [["LoadImage", "DWPreprocessor", "SaveImage"]]
 
 
 def test_nongen_rembg_pipeline():
-    # The Inspyrenet background-remover fixture: load → rembg → (mask→image) → save, saves last.
+    # The Inspyrenet background-remover fixture writes two images: the cut-out and its mask. Honest
+    # reporting — the cut-out's path has no MaskToImage (that op only feeds the mask output).
     recipe = extract_recipe(FIXTURES_DIR / "tools-rembg.png")
-    assert recipe.operations == ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"]
+    assert recipe.pipelines == [
+        ["LoadImage", "InspyrenetRembg", "SaveImage"],
+        ["LoadImage", "InspyrenetRembg", "MaskToImage", "SaveImage"],
+    ]
 
 
 # --------------------------------------------------------------------------------
