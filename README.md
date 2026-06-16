@@ -49,6 +49,28 @@ analyzing ComfyUI workflows — a trivial txt2img graph is sometimes captured, b
 edit-mode, LoRA chains, and non-standard loaders are not. `chandra` walks the embedded ComfyUI graph
 itself, reconstructs the recipe, and re-expresses it in the one format those tools read robustly.
 
+## Privacy by design
+
+`chandra` is interop-first — its whole point is sharing metadata — but it's built to widen your
+exposure as little as possible while doing it:
+
+- **It runs entirely locally.** No network calls, no telemetry, no phone-home — ever. Not even
+  `--hash`: AutoV2 hashes are computed from your local files, and CivitAI matches them on *its* side,
+  only when *you* choose to upload. Nothing about your images leaves your machine on `chandra`'s
+  account.
+- **Writing is opt-in and reversible.** `show` never modifies anything; `inject` writes only when you
+  ask, and never defaults to the current directory; `eject` removes only the layer chandra stamped,
+  leaving the original ComfyUI graph byte-for-byte intact.
+- **It surfaces only the recipe you already embedded.** `inject` re-expresses the prompts, model, and
+  settings ComfyUI wrote into the file — it adds nothing that wasn't already there. For images that
+  aren't generations (background removers, pose detectors, …) it reports only the *operations* the
+  graph performs, never user-controlled free text such as output filename patterns (which can carry
+  usernames or paths).
+- **`scrub` for safe sharing.** To report a graph chandra misparses, `scrub` strips a copy to an
+  anonymized skeleton — graph wiring kept; image, prompt prose, and the editable `workflow` chunk
+  removed. The skeleton shows *structure* without being loadable back into ComfyUI, so sharing it
+  can't reproduce your setup.
+
 ## Injecting metadata (`inject`)
 
 `inject` writes the recipe straight into the PNG, in place and losslessly — the original ComfyUI
