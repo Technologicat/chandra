@@ -6,7 +6,7 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 ---
 
-## 0.2.0 (in progress)
+## 0.2.0 — 2026-06-16
 
 ### Added
 
