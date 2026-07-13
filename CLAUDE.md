@@ -91,14 +91,16 @@ preserve that.
 
 ## Releases
 
+Project-specific:
+
 - **Tags are bare** (`0.1.1`, not `v0.1.1`) — check `git tag --list` before tagging.
+- **Post-release:** bump to `X.Y.Z.dev0`, add a `## X.Y.Z (in progress)` changelog stub.
 - PyPI publishing is **CI-driven** via trusted publishing on tag push; no manual `twine upload`.
-- Changelog (`CHANGELOG.md`) is **user-facing** and follows the fleet compact style: one or two
-  sentences per entry, what changed from the user's perspective; an `Internal` subsection per version
-  for refactors/CI/test changes. Only document changes since the last tagged release — a bug introduced
-  and fixed within an unreleased dev window never reached a user (note it in the commit message
-  instead). Write the entry alongside the fix, not at release time.
-- Post-release: bump to `X.Y.Z.dev0`, add a `## X.Y.Z (in progress)` changelog stub.
+
+`CHANGELOG.md` follows the fleet-wide house style — user-facing, compact, only changes since the last
+tagged release, written alongside the fix rather than at release time. chandra adds nothing to it, so
+the rules are not restated here: the canonical source is the `changelog` skill in the fleet Claude Code
+config, and it wins over any summary that drifts into this file.
 
 ## Voice and naming
 
