@@ -29,8 +29,13 @@ jobs:
         # Full CPython matrix on Linux; newest stable CPython also on macOS and Windows. chandra is
         # pure Python but cross-platform by design (e.g. $CHANDRA_MODELS_DIR uses os.pathsep, ':' vs
         # ';'), so the macOS/Windows spot-checks guard the path-handling that only differs off Linux.
+        #
+        # PyPy on Linux only. What the macOS/Windows entries watch for is path handling, which does
+        # not vary by interpreter, so running PyPy there would buy nothing. `pypy-3.11` is the whole
+        # list rather than a lagging entry: stable PyPy 7.3.23 implements Python 3.11 and nothing
+        # else, so it does not track the CPython column and will not until PyPy ships a newer one.
         os: [ubuntu-latest]
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "pypy-3.11"]
         include:
           - os: macos-latest
             python-version: "3.14"
