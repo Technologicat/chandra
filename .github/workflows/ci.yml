@@ -3,7 +3,7 @@
 #
 # Customized for chandra: pure-Python, installed with PDM, linted with the local ruff config.
 
-name: Tests
+name: CI
 
 on:
   push:
