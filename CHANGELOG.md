@@ -6,9 +6,11 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 ---
 
-## 0.2.1 (in progress)
+## 0.3.0 (in progress)
 
-*No user-visible changes yet.*
+### Added
+
+- Python 3.15 is now supported and tested.
 
 ---
 
