@@ -65,6 +65,21 @@ jobs:
       run: pdm run ruff check . --ignore SIM103
     - name: Lint advisories (non-blocking)
       run: pdm run ruff check . --select SIM103 || true
+    # Enables `test_real_sdpr_reads_injected`, which checks that metadata chandra
+    # injects is readable by the actual SD Prompt Reader parser rather than by our
+    # own idea of its format. It self-skips when the parser is absent, so without
+    # this step the interop claim is asserted by a test that never runs.
+    #
+    # Not a declared dependency, because sd-prompt-reader pulls a whole GUI stack
+    # (customtkinter, tkinterdnd2, pyobjc on macOS) and pins pillow==10.3.0.
+    # `--no-deps` plus the two modules the parser actually imports keeps it headless.
+    # Into the PDM venv, not the outer interpreter — that is what `pdm run` sees.
+    #
+    # Linux only for now: the headless install is verified there, and the deps
+    # `--no-deps` drops are the platform-specific ones. Widen once it has held.
+    - name: Install the SD Prompt Reader parser, headless
+      if: runner.os == 'Linux'
+      run: pdm run python -m pip install --no-deps sd-prompt-reader pillow piexif
     - name: Run tests
       run: pdm run pytest tests/ -v
 
