@@ -12,7 +12,7 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 ---
 
-## 0.3.0 — 2026-08-18
+## 0.3.0 — First light — 2026-08-18
 
 ### Added
 
@@ -20,7 +20,7 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 ---
 
-## 0.2.0 — 2026-06-16
+## 0.2.0 — Earthshine — 2026-06-16
 
 ### Added
 
