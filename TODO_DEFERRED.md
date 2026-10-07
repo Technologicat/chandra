@@ -1,6 +1,10 @@
 # Deferred TODOs
 
+<!-- New items go below this line. -->
+
 ## Pix writes a `.comments` sidecar dir for chandra-injected images
+
+*Cluster: xmp-metadata · Cost: ? · Gate: none · Filed: 2026-06-11*
 
 Once an image carries our XMP `dc:description`, Pix automatically creates a `.comments/` sidecar
 directory alongside it (its own comment cache) when it ingests the file. The metadata itself shows
