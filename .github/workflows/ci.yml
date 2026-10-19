@@ -31,11 +31,11 @@ jobs:
         # ';'), so the macOS/Windows spot-checks guard the path-handling that only differs off Linux.
         #
         # PyPy on Linux only. What the macOS/Windows entries watch for is path handling, which does
-        # not vary by interpreter, so running PyPy there would buy nothing. `pypy-3.11` is the whole
-        # list rather than a lagging entry: stable PyPy 7.3.23 implements Python 3.11 and nothing
-        # else, so it does not track the CPython column and will not until PyPy ships a newer one.
+        # not vary by interpreter, so running PyPy there would buy nothing. The PyPy entries are every
+        # Python version stable PyPy implements (8.0.x: 3.11 and 3.12), so they trail the CPython
+        # column by design; extend them when PyPy ships a newer one.
         os: [ubuntu-latest]
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "pypy-3.11"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "pypy-3.11", "pypy-3.12"]
         include:
           - os: macos-latest
             python-version: "3.14"

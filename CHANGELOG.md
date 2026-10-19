@@ -10,8 +10,7 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 ### Added
 
-- PyPy is now supported and tested. The CI matrix gains `pypy-3.11`, which is the only version
-  stable PyPy currently implements.
+- PyPy is now supported and tested, on both Python versions stable PyPy implements: 3.11 and 3.12.
 
 ---
 
