@@ -12,6 +12,10 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 - PyPy is now supported and tested, on both Python versions stable PyPy implements: 3.11 and 3.12.
 
+### Changed
+
+- `chardet` is no longer installed as a dependency; chandra never used it.
+
 ---
 
 ## 0.3.0 — First light — 2026-08-18

@@ -536,7 +536,7 @@ to have it on PATH globally).
 its first 8 data bytes). So the shared **`pngchunks`** module is a small dependency-free byte-level
 read/splice/CRC implementation (CRC via `zlib.crc32`); it replaces the pypng usage in the current
 script, and both tools import it. Runtime deps reduce to `simpleeval` (rosetta scalar resolver),
-`argcomplete` (completion), and `chardet` (concordance's defensive non-UTF-8 decode). The
+`argcomplete` (completion), and `colorama` (concordance's match highlighting). The
 distribution ships both tools and the README. Lint/style/CI per the fleet conventions.
 
 ## Naming
