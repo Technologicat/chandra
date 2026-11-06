@@ -14,9 +14,9 @@ def _graph():
               "class_type": "KSampler", "_meta": {"title": "KSampler"}},
         "4": {"inputs": {"ckpt_name": "models/SomeModel-Q4.gguf"}, "class_type": "CheckpointLoaderSimple"},
         "6": {"inputs": {"text": "a very private positive prompt the user would rather not publish",
-                        "clip": ["4", 1]}, "class_type": "CLIPTextEncode"},
+                         "clip": ["4", 1]}, "class_type": "CLIPTextEncode"},
         "7": {"inputs": {"text": "an equally telling negative prompt full of personal style markers",
-                        "clip": ["4", 1]}, "class_type": "CLIPTextEncode"},
+                         "clip": ["4", 1]}, "class_type": "CLIPTextEncode"},
         "9": {"inputs": {"filename_prefix": "20260101-1234-MyBrand", "images": ["3", 0]},
               "class_type": "SaveImage"},
     }
