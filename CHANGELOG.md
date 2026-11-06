@@ -12,9 +12,9 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 - PyPy is now supported and tested, on both Python versions stable PyPy implements: 3.11 and 3.12.
 - **`chandra inject` marks images as AI-generated with the IPTC Digital Source Type**, the standard field platforms read (`Iptc4xmpExt:DigitalSourceType`, in the XMP packet).
-  - `trainedAlgorithmicMedia` ("Created using Generative AI") for a generation from an empty latent; `compositeWithTrainedAlgorithmicMedia` ("Edited using Generative AI") when an input image is encoded into the latent (img2img, inpainting) or conditions an edit model.
+  - `trainedAlgorithmicMedia` ("Created using Generative AI") for a generation from an empty latent; `compositeWithTrainedAlgorithmicMedia` ("Edited using Generative AI") when an input image is encoded into the latent (img2img, inpainting), conditions an edit model, or is composited with the generated image after sampling.
   - An input image that only guides the generation (ControlNet, IP-Adapter, Flux Redux) still counts as created.
-  - Where the graph doesn't prove either — no sampler, or an input image used some other way, such as composited in after sampling — nothing is written.
+  - Where the graph doesn't prove either — no sampler, or an input image used some other way, such as a colour-match reference — nothing is written.
   - Also written, from IPTC Photo Metadata 2025.1: **AI Prompt Information** (the prompts, labelled `Positive:` / `Negative:`) and **AI System Used** (the generator, VAE and text encoder files, named as in the `parameters` chunk).
   - `chandra show` prints the source type, or why it abstained, and the AI system; `show --recipe` prints the source type too.
   - On by default. `--no-mark-ai` leaves all of them out.

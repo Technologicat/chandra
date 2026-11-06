@@ -145,15 +145,16 @@ writes one of two values, from what the ComfyUI graph shows:
 - **`trainedAlgorithmicMedia`** ("Created using Generative AI"): the sampler starts from an empty
   latent, and any input image only guides it (below).
 - **`compositeWithTrainedAlgorithmicMedia`** ("Edited using Generative AI"): an input image is encoded
-  into the starting latent (img2img, inpainting, outpainting), or conditions the generation as edit
-  models use it (Flux.2 reference latents, Qwen-Image-Edit).
+  into the starting latent (img2img, inpainting, outpainting), conditions the generation as edit
+  models use it (Flux.2 reference latents, Qwen-Image-Edit), or is composited with the generated image
+  after sampling (pasted or blended in).
 
 An input image that only *guides* the generation — a ControlNet pose or depth map, an IP-Adapter or
 Flux Redux reference — doesn't become part of the output, so that still counts as created.
 
 Where the graph doesn't prove either, chandra writes nothing rather than guess: images that aren't
 generations (background removers, pose detectors, …), and generations that use an input image some
-other way, such as compositing it in after sampling. `chandra show` prints the value it would write,
+other way, such as a colour-match reference. `chandra show` prints the value it would write,
 or why it abstained.
 
 Alongside it go two properties from IPTC Photo Metadata 2025.1, each written when the graph

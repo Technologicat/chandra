@@ -167,7 +167,7 @@ def test_find_sampler_through_composite_by_structure_not_input_name():
     r = analyze.analyze(g)
     assert r.sampler_class == "KSampler" and r.positive == "a cat"
     assert r.vae == "vae.pt"                               # the VAE walk follows the same path
-    assert r.digital_source_type is None                   # a post-sampling composite still abstains
+    assert r.digital_source_type == analyze.SOURCE_EDITED  # composited with another image
 
 
 def test_find_sampler_prefers_the_input_that_leads_to_a_sampler():
@@ -470,9 +470,9 @@ def test_source_type_ipadapter_guided_is_created():
     assert "IPAdapterAdvanced" in r.digital_source_type_reason
 
 
-def test_source_type_post_sampling_composite_abstains():
-    # A generated image pasted onto a loaded one after sampling: neither a pure creation nor an edit
-    # the sampler made. The guidance exemption must not cover it.
+def test_source_type_post_sampling_composite_is_edited():
+    # A generated image blended with a loaded one after sampling is IPTC's definition of the composite
+    # term: "the compositing of trained algorithmic media with some other media".
     g = _txt2img_graph()
     g["save"]["inputs"]["images"] = ["comp", 0]
     g = _with(g,
@@ -482,8 +482,35 @@ def test_source_type_post_sampling_composite_abstains():
               load={"class_type": "LoadImage", "inputs": {"image": "backdrop.png"}})
     r = analyze.analyze(g)
     assert r.sampler_class                               # the sampler was found through the composite
-    assert r.digital_source_type is None
+    assert r.digital_source_type == analyze.SOURCE_EDITED
     assert "ImageBlend" in r.digital_source_type_reason
+
+
+def test_source_type_composite_of_two_generations_is_created():
+    # Both sides of the composite are generated: no other media enters it.
+    g = _txt2img_graph()
+    g["save"]["inputs"]["images"] = ["comp", 0]
+    g = _with(g,
+              comp={"class_type": "ImageBlend", "inputs": {
+                  "blend_factor": 0.5, "blend_mode": "normal", "image1": ["dec", 0], "image2": ["dec", 0]}},
+              dec={"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}})
+    assert analyze.analyze(g).digital_source_type == analyze.SOURCE_CREATED
+
+
+def test_source_type_post_sampling_color_match_abstains():
+    # A loaded image used as a colour reference after sampling isn't composited into the output, and
+    # isn't guidance of the generation either: abstain, naming the node.
+    g = _txt2img_graph()
+    g["save"]["inputs"]["images"] = ["cm", 0]
+    g = _with(g,
+              cm={"class_type": "ColorMatch", "inputs": {
+                  "method": "mkl", "image_target": ["dec", 0], "image_ref": ["load", 0]}},
+              dec={"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}},
+              load={"class_type": "LoadImage", "inputs": {"image": "palette.png"}})
+    r = analyze.analyze(g)
+    assert r.sampler_class                               # the walk passed the colour match
+    assert r.digital_source_type is None
+    assert "ColorMatch" in r.digital_source_type_reason
 
 
 def test_source_type_controlnet_with_img2img_is_edited():

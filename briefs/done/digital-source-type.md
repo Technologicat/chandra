@@ -68,9 +68,10 @@ Add a short README subsection under "Injecting metadata", "Marking images as AI-
 - **Classifier** (`analyze._classify_source`), in order:
   1. Follow the sampler's starting latent upstream (through further samplers, latent and pixel transforms, encoders). Reaching a loaded image → edited.
   2. An edit-conditioning node on any sampler of that chain whose upstream holds a loaded image → edited. Recognized by shape: `conditioning` + `latent` (`ReferenceLatent`); a text encoder with `image*` inputs (`TextEncodeQwenImageEdit*`); `positive` + `pixels` (`InpaintModelConditioning`, `InstructPixToPixConditioning`).
-  3. The latent trail ended somewhere other than an empty-latent generator (a node with `batch_size`) → abstain.
-  4. Any loaded image upstream of the output used other than as a guide (a post-sampling composite, say) → abstain, naming the consuming node's `class_type`. Guides are recognized by shape: a `control_net`, `ipadapter` or `style_model` input (ControlNet, IP-Adapter, Flux Redux), and the walk enters them only through the conditioning or model they pass on.
-  5. Otherwise → created, the reason naming any guidance nodes.
+  3. A composite node on the path from the sampler to the output, with a loaded image upstream of its other input → edited. Recognized by its input pair: `destination`+`source`, `image1`+`image2`, `background`+`foreground` (`ImageCompositeMasked`, `ImageBlend`, …). Added 2026-11-06: IPTC defines the term as "the compositing of trained algorithmic media with some other media", which this is literally.
+  4. The latent trail ended somewhere other than an empty-latent generator (a node with `batch_size`) → abstain.
+  5. Any loaded image upstream of the output used other than as a guide (a colour-match reference, say) → abstain, naming the consuming node's `class_type`. Guides are recognized by shape: a `control_net`, `ipadapter` or `style_model` input (ControlNet, IP-Adapter, Flux Redux), and the walk enters them only through the conditioning or model they pass on.
+  6. Otherwise → created, the reason naming any guidance nodes.
 - **Image guidance counts as created** (decided 2026-11-06): the guide image doesn't become part of the output, which is a regular generated image. Initially built to abstain, on the grounds that a tile ControlNet re-rendering a photo is closer to an edit; that case is accepted as "created".
 - **Known gap:** an image source whose class name doesn't contain both "load" and "image", feeding only the conditioning, would read as "created". On the latent path the same node ends the trail without a `batch_size`, so that case abstains.
 - **External readers:** exiftool isn't installed on the dev machine, so the exiftool test skips there; it runs wherever exiftool is present.

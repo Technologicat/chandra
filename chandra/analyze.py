@@ -594,6 +594,34 @@ def _image_edit_node(graph, sampler_ids):
     return None
 
 
+# Input pairs naming the two images a composite node combines (ImageCompositeMasked, ImageBlend, …).
+_COMPOSITE_INPUT_PAIRS = (("destination", "source"), ("image1", "image2"), ("background", "foreground"))
+
+
+def _composite_with_loaded_image(graph, sink_id, sampler_id):
+    """The id of a composite node between the sampler and the sink with a loaded image upstream of its
+    other input; else None.
+
+    Walks the produced-image path from the sink to the sampler. A composite is recognized by its input
+    pair, not by its name; a node using a loaded image some other way (a colour-match reference) is
+    not one.
+    """
+    ref = _inputs(graph.get(sink_id)).get("images")
+    seen = set()
+    while _is_link(ref) and ref[0] not in seen and ref[0] != sampler_id:
+        nid = ref[0]
+        seen.add(nid)
+        ins = _inputs(graph.get(nid))
+        ref = _next_image_ref(graph, ins)
+        for pair in _COMPOSITE_INPUT_PAIRS:
+            if not all(_is_link(ins.get(k)) for k in pair):
+                continue
+            others = [ins[k] for k in pair if ins[k] != ref]
+            if any(_is_image_source(graph[m]) for other in others for m in _reachable(graph, other[0])):
+                return nid
+    return None
+
+
 def _upstream_past_guidance(graph, start_id):
     """Like `_reachable`, but entering an image-guidance node only through its passthrough inputs.
 
@@ -625,10 +653,11 @@ def _image_consumer(graph, upstream):
 def _classify_source(graph, sink_id, sampler_id):
     """The IPTC Digital Source Type the graph proves, as ``(term, reason)``; term None = abstain.
 
-    Edited is proven by a loaded image reaching the sampler's starting latent, or by edit conditioning
-    on a loaded image. Created is proven by an empty starting latent, with loaded images upstream of the
-    output only as guides (ControlNet, IP-Adapter, Redux). Anything else — the latent's origin
-    untraceable, or a loaded image used some other way, such as composited after sampling — abstains.
+    Edited is proven by a loaded image reaching the sampler's starting latent, by edit conditioning on
+    a loaded image, or by compositing the generated image with a loaded one after sampling. Created is
+    proven by an empty starting latent, with loaded images upstream of the output only as guides
+    (ControlNet, IP-Adapter, Redux). Anything else — the latent's origin untraceable, or a loaded image
+    used some other way, such as a colour-match reference — abstains.
     """
     origin, samplers = _trace_latent_origin(graph, sampler_id)
     if origin == "image":
@@ -636,6 +665,10 @@ def _classify_source(graph, sink_id, sampler_id):
     edit = _image_edit_node(graph, samplers)
     if edit is not None:
         return SOURCE_EDITED, f"`{graph[edit].get('class_type')}` conditions the generation on an input image"
+    composite = _composite_with_loaded_image(graph, sink_id, sampler_id)
+    if composite is not None:
+        return SOURCE_EDITED, (f"`{graph[composite].get('class_type')}` composites the generated image "
+                               "with an input image")
     if origin is None:
         return None, "could not trace where the starting latent comes from"
     upstream, guides = _upstream_past_guidance(graph, sink_id)
