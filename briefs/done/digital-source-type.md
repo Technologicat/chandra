@@ -61,3 +61,17 @@ Rationale:
 ## Docs
 
 Add a short README subsection under "Injecting metadata", "Marking images as AI-generated", covering the two values, the abstain cases, and the unsigned-signal caveat. Add a changelog entry.
+
+## Outcome (built 2026-11-06)
+
+- **Foreign values went through a prerequisite change.** `inject` had no "leave unstamped alone" rule to mirror: it overwrote any `parameters` chunk and replaced any XMP packet wholesale. It now checks each layer for chandra's stamp, as `eject` does, skips a foreign one with a warning, and overwrites under a new `inject --force`. A foreign `DigitalSourceType` lives in a foreign packet, so it survives by the same rule. Merging our properties into a foreign packet was rejected: it needs a real XMP editor, and `eject` could no longer remove our part by dropping the chunk, which breaks the md5 round trip.
+- **Classifier** (`analyze._classify_source`), in order:
+  1. Follow the sampler's starting latent upstream (through further samplers, latent and pixel transforms, encoders). Reaching a loaded image → edited.
+  2. An edit-conditioning node on any sampler of that chain whose upstream holds a loaded image → edited. Recognized by shape: `conditioning` + `latent` (`ReferenceLatent`); a text encoder with `image*` inputs (`TextEncodeQwenImageEdit*`); `positive` + `pixels` (`InpaintModelConditioning`, `InstructPixToPixConditioning`).
+  3. The latent trail ended somewhere other than an empty-latent generator (a node with `batch_size`) → abstain.
+  4. Any loaded image upstream of the output used some other way (ControlNet, IP-Adapter, a post-sampling composite) → abstain, naming the consuming node's `class_type`.
+  5. Otherwise → created.
+- **Image guidance abstains** rather than reading as "created": a ControlNet input could be a pose skeleton or the photo being re-rendered by a tile model, and the graph doesn't say which.
+- **Residual risk:** an image source whose class name doesn't contain both "load" and "image", feeding only the conditioning, would read as "created". On the latent path the same node ends the trail without a `batch_size`, so that case abstains.
+- **External readers:** exiftool isn't installed on the dev machine, so the exiftool test skips there; it runs wherever exiftool is present.
+- **Not built:** the IPTC 2025.1 AI fields (*AI Prompt Information*, *AI System Used*, …). The brief left them to evaluate as a second step, after verifying property names against the published spec.

@@ -11,6 +11,12 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 ### Added
 
 - PyPy is now supported and tested, on both Python versions stable PyPy implements: 3.11 and 3.12.
+- **`chandra inject` marks images as AI-generated with the IPTC Digital Source Type**, the standard field platforms read (`Iptc4xmpExt:DigitalSourceType`, in the XMP packet).
+  - `trainedAlgorithmicMedia` ("Created using Generative AI") for a generation from an empty latent; `compositeWithTrainedAlgorithmicMedia` ("Edited using Generative AI") when an input image is encoded into the latent (img2img, inpainting) or conditions an edit model.
+  - Where the graph doesn't prove either — no sampler, or an input image used some other way, such as ControlNet guidance — nothing is written.
+  - `chandra show` prints the value, or why it abstained; `show --recipe` too.
+  - On by default. `--no-mark-ai` leaves it out.
+  - An unsigned signal, not proof: any metadata tool can change or strip it.
 
 ### Changed
 

@@ -7,7 +7,8 @@ an AUTOMATIC1111 / SD-Forge `parameters` string so that services which don't ana
 Three verbs, a deliberate read/write split (writing is never the default):
 
 - `chandra show`   — analyze and print (read-only); `--recipe` dumps the structured recipe instead.
-- `chandra inject` — write the synthesized `parameters` chunk (and an XMP description) into the PNG.
+- `chandra inject` — write the synthesized `parameters` chunk (and an XMP description, with the IPTC
+  Digital Source Type marking it AI-generated) into the PNG.
 - `chandra eject`  — remove that metadata again, restoring the image to its pre-inject state.
 
 The module keeps the name `rosetta` (it re-expresses one recipe in a script other tools read — see
@@ -69,13 +70,17 @@ def add_subparser(subparsers):
         "inject", help="write A1111/CivitAI metadata into the PNG(s)",
         description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place. "
                     "Also embeds the recipe as an XMP description, so general image viewers (Pix, etc.) "
-                    "show it too. A `parameters` chunk or XMP packet written by another tool is left in "
+                    "show it too, and marks the image as AI-generated or AI-edited with the IPTC Digital "
+                    "Source Type, where the graph proves which. A `parameters` chunk or XMP packet written by another tool is left in "
                     "place unless `--force` is given.")
     _add_paths_arg(inject)
     _add_hash_args(inject)
     inject.add_argument("--no-xmp", action="store_true",
                         help="skip the XMP description for general viewers (write only the SD-tool "
                              "`parameters` chunk)")
+    inject.add_argument("--no-mark-ai", action="store_true",
+                        help="leave the IPTC Digital Source Type (\"created/edited using generative AI\") "
+                             "out of the XMP packet")
     inject.add_argument("--force", action="store_true",
                         help="overwrite a `parameters` chunk or XMP packet even if chandra didn't write it")
     inject.set_defaults(func=run_inject, parser=inject)
@@ -83,8 +88,8 @@ def add_subparser(subparsers):
     eject = subparsers.add_parser(
         "eject", help="remove the A1111/CivitAI metadata that `inject` wrote",
         description="Remove chandra's injected metadata layer — the A1111 `parameters` chunk and the XMP "
-                    "description — from the PNG(s), in place, leaving the original ComfyUI "
-                    "`prompt`/`workflow` chunks byte-intact. By default only metadata chandra wrote "
+                    "packet (description and Digital Source Type) — from the PNG(s), in place, leaving the "
+                    "original ComfyUI `prompt`/`workflow` chunks byte-intact. By default only metadata chandra wrote "
                     "(stamped `chandra-rosetta`) is removed; `--force` removes any `parameters`/XMP "
                     "regardless of origin.")
     _add_paths_arg(eject)
@@ -185,7 +190,9 @@ def _process(args, write: bool) -> int:
                 written.append("parameters")
             if not getattr(args, "no_xmp", False) and \
                     _may_write(path, fields.get(pngchunks.XMP_KEYWORD), _ours_xmp, "XMP", force):
-                out_chunks = pngchunks.set_xmp(out_chunks, _xmp.build(_analyze.format_description(recipe)))
+                source_type = None if getattr(args, "no_mark_ai", False) else recipe.digital_source_type
+                packet = _xmp.build(_analyze.format_description(recipe), digital_source_type=source_type)
+                out_chunks = pngchunks.set_xmp(out_chunks, packet)
                 written.append("XMP description")
             if not written:
                 print(f"{path}: nothing injected")
@@ -199,7 +206,11 @@ def _process(args, write: bool) -> int:
             print(f"injected ({', '.join(written)}) → {path}")
         else:
             print(f"=== {path} ===")
-            print(_analyze.format_recipe(recipe) if args.recipe else params)
+            if args.recipe:
+                print(_analyze.format_recipe(recipe))
+            else:
+                print(params)
+                print(f"DigitalSourceType: {_analyze.format_source_type(recipe)}")
             print()
     if ctx is not None:
         ctx[1].save()

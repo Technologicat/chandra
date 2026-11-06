@@ -34,7 +34,7 @@ def _txt2img_graph():
         "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": "a cat", "clip": ["ckpt", 1]}},
         "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": "blurry", "clip": ["ckpt", 1]}},
         "ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "model.safetensors"}},
-        "lat": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512}},
+        "lat": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
         "vae": {"class_type": "VAELoader", "inputs": {"vae_name": "vae.pt"}},
     }
 
@@ -352,3 +352,97 @@ def test_format_steps_passes_through_non_numeric():
     assert analyze.format_steps(None) == "None"
     assert analyze.format_steps("?") == "?"
     assert analyze.format_steps(5.6) == "5"
+
+
+# --------------------------------------------------------------------------------
+# IPTC Digital Source Type — synthetic graphs for the shapes the fixtures don't cover
+
+def _with(graph, **nodes):
+    graph.update(nodes)
+    return graph
+
+
+def test_source_type_txt2img_is_created():
+    r = analyze.analyze(_txt2img_graph())
+    assert r.digital_source_type == analyze.SOURCE_CREATED
+
+
+def test_source_type_hires_chain_is_created():
+    # A second pass over the first sampler's upscaled latent is still txt2img: the latent trail runs
+    # through both samplers to the empty latent.
+    g = _txt2img_graph()
+    g["ks"]["inputs"]["latent_image"] = ["up", 0]
+    g = _with(g,
+              up={"class_type": "LatentUpscaleBy", "inputs": {"scale_by": 1.5, "samples": ["ks1", 0]}},
+              ks1={"class_type": "KSampler", "inputs": {
+                  "seed": 1, "steps": 20, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal",
+                  "denoise": 1.0, "model": ["ckpt", 0], "positive": ["pos", 0], "negative": ["neg", 0],
+                  "latent_image": ["lat", 0]}})
+    r = analyze.analyze(g)
+    assert r.digital_source_type == analyze.SOURCE_CREATED
+
+
+def test_source_type_controlnet_abstains():
+    # An input image guiding through ControlNet is neither proof of an edit nor of a pure creation.
+    g = _txt2img_graph()
+    g["ks"]["inputs"]["positive"] = ["cn", 0]
+    g["ks"]["inputs"]["negative"] = ["cn", 1]
+    g = _with(g,
+              cn={"class_type": "ControlNetApplyAdvanced", "inputs": {
+                  "strength": 1.0, "positive": ["pos", 0], "negative": ["neg", 0],
+                  "control_net": ["cnl", 0], "image": ["load", 0]}},
+              cnl={"class_type": "ControlNetLoader", "inputs": {"control_net_name": "pose.safetensors"}},
+              load={"class_type": "LoadImage", "inputs": {"image": "pose.png"}})
+    r = analyze.analyze(g)
+    assert r.positive == "a cat"                         # the conditioning still traced through
+    assert r.digital_source_type is None
+    assert "ControlNetApplyAdvanced" in r.digital_source_type_reason
+
+
+def test_source_type_controlnet_with_img2img_is_edited():
+    # The same guidance on top of an encoded input image: the latent proves the edit regardless.
+    g = _txt2img_graph()
+    g["ks"]["inputs"]["positive"] = ["cn", 0]
+    g["ks"]["inputs"]["negative"] = ["cn", 1]
+    g["ks"]["inputs"]["latent_image"] = ["enc", 0]
+    g = _with(g,
+              cn={"class_type": "ControlNetApplyAdvanced", "inputs": {
+                  "strength": 1.0, "positive": ["pos", 0], "negative": ["neg", 0],
+                  "control_net": ["cnl", 0], "image": ["load", 0]}},
+              cnl={"class_type": "ControlNetLoader", "inputs": {"control_net_name": "pose.safetensors"}},
+              enc={"class_type": "VAEEncode", "inputs": {"pixels": ["load", 0], "vae": ["vae", 0]}},
+              load={"class_type": "LoadImage", "inputs": {"image": "photo.png"}})
+    assert analyze.analyze(g).digital_source_type == analyze.SOURCE_EDITED
+
+
+def test_source_type_untraceable_latent_abstains():
+    g = _txt2img_graph()
+    g["lat"] = {"class_type": "LoadLatent", "inputs": {"latent": "some.latent"}}
+    r = analyze.analyze(g)
+    assert r.digital_source_type is None
+    assert "starting latent" in r.digital_source_type_reason
+
+
+def test_source_type_instruct_pix2pix_is_edited():
+    g = _txt2img_graph()
+    g["ks"]["inputs"]["positive"] = ["ip2p", 0]
+    g["ks"]["inputs"]["negative"] = ["ip2p", 1]
+    g = _with(g,
+              ip2p={"class_type": "InstructPixToPixConditioning", "inputs": {
+                  "positive": ["pos", 0], "negative": ["neg", 0], "vae": ["vae", 0], "pixels": ["load", 0]}},
+              load={"class_type": "LoadImage", "inputs": {"image": "photo.png"}})
+    assert analyze.analyze(g).digital_source_type == analyze.SOURCE_EDITED
+
+
+def test_image_only_checkpoint_loader_is_not_an_image_source():
+    # "Load" and "Image" in the class name, but it loads a model — no input image enters the graph.
+    assert not analyze._is_image_source(
+        {"class_type": "ImageOnlyCheckpointLoader", "inputs": {"ckpt_name": "svd.safetensors"}})
+    assert analyze._is_image_source({"class_type": "LoadImage", "inputs": {"image": "x.png"}})
+
+
+def test_format_recipe_reports_source_type():
+    r = analyze.analyze(_txt2img_graph())
+    assert "source:   trainedAlgorithmicMedia (" in analyze.format_recipe(r)
+    r = analyze.analyze({})
+    assert "source:   abstained (" in analyze.format_recipe(r)

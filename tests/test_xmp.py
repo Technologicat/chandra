@@ -6,15 +6,18 @@ from chandra import xmp
 
 _NS = {"x": "adobe:ns:meta/",
        "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-       "dc": "http://purl.org/dc/elements/1.1/"}
+       "dc": "http://purl.org/dc/elements/1.1/",
+       "Iptc4xmpExt": "http://iptc.org/std/Iptc4xmpExt/2008-02-29/"}
+
+
+def _root(packet: str):
+    """Parse the packet, sans xpacket PIs."""
+    return ET.fromstring(packet[packet.index("<x:xmpmeta"): packet.index("</x:xmpmeta>") + len("</x:xmpmeta>")])
 
 
 def _dc_description(packet: str) -> str:
-    """Parse the packet (sans xpacket PIs) and return the dc:description x-default text."""
-    body = packet[packet.index("<x:xmpmeta"): packet.index("</x:xmpmeta>") + len("</x:xmpmeta>")]
-    root = ET.fromstring(body)
-    li = root.find(".//dc:description/rdf:Alt/rdf:li", _NS)
-    return li.text
+    """The dc:description x-default text."""
+    return _root(packet).find(".//dc:description/rdf:Alt/rdf:li", _NS).text
 
 
 def test_packet_is_well_formed_xml_with_xpacket_wrapper():
@@ -47,3 +50,16 @@ def test_packet_carries_chandra_toolkit_stamp():
     # The `x:xmptk` stamp is what lets `chandra eject` recognize and remove only its own XMP.
     from chandra import TOOL_TAG
     assert f'x:xmptk="{TOOL_TAG}' in xmp.build("x")
+
+
+def test_digital_source_type_is_the_full_uri_in_the_description():
+    packet = xmp.build("x", digital_source_type="trainedAlgorithmicMedia")
+    desc = _root(packet).find(".//rdf:Description", _NS)
+    dst = desc.find("Iptc4xmpExt:DigitalSourceType", _NS)  # namespace resolves, same rdf:Description
+    assert dst.text == "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
+    assert _dc_description(packet) == "x"
+
+
+def test_no_digital_source_type_means_no_property_and_no_namespace():
+    packet = xmp.build("x")
+    assert "DigitalSourceType" not in packet and "Iptc4xmpExt" not in packet

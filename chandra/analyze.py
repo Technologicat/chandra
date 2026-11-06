@@ -26,8 +26,15 @@ try:
 except ImportError:  # resolver degrades gracefully without it
     simple_eval = None
 
-__all__ = ["Lora", "Recipe", "analyze", "conditioning_roles", "describe_workflow",
-           "format_steps", "format_recipe", "format_description", "format_workflow_description"]
+__all__ = ["SOURCE_CREATED", "SOURCE_EDITED",
+           "Lora", "Recipe", "analyze", "conditioning_roles", "describe_workflow",
+           "format_steps", "format_recipe", "format_description", "format_workflow_description",
+           "format_source_type"]
+
+# IPTC Digital Source Type terms (vocabulary at http://cv.iptc.org/newscodes/digitalsourcetype/) —
+# the two a ComfyUI graph can prove.
+SOURCE_CREATED = "trainedAlgorithmicMedia"              # "Created using Generative AI"
+SOURCE_EDITED = "compositeWithTrainedAlgorithmicMedia"  # "Edited using Generative AI"
 
 _MAX_DEPTH = 64  # guard against cycles/pathological graphs (the graph is a DAG, but a file may lie)
 
@@ -66,6 +73,8 @@ class Recipe:
     height: Optional[int] = None
     sampler_class: Optional[str] = None
     pipelines: list = field(default_factory=list)  # non-gen workflows: one op-class_type list per output
+    digital_source_type: Optional[str] = None         # SOURCE_CREATED / SOURCE_EDITED, None = abstained
+    digital_source_type_reason: Optional[str] = None  # why that value, or why abstained
     warnings: list = field(default_factory=list)
 
 
@@ -93,6 +102,32 @@ def _is_save(node) -> bool:
 
 def _is_base_loader_field(name: str) -> bool:
     return name in ("ckpt_name", "gguf_name", "unet_name", "model_path")
+
+
+def _is_image_source(node) -> bool:
+    """A node that brings an image file into the graph: `LoadImage`, `LoadImageMask`, and kin."""
+    ct = node.get("class_type", "").lower()
+    if any(_is_base_loader_field(k) for k in _inputs(node)):  # e.g. ImageOnlyCheckpointLoader: a model
+        return False
+    return "load" in ct and "image" in ct
+
+
+def _is_edit_conditioning(node) -> bool:
+    """A node that conditions the generation on an image, the way edit models and inpainting do.
+
+    Three shapes: a reference latent attached to conditioning (`ReferenceLatent`: `conditioning` +
+    `latent`); a text encoder that also takes images (`TextEncodeQwenImageEdit*`: `prompt` + `image*`);
+    and conditioning built from the source pixels (`InpaintModelConditioning`,
+    `InstructPixToPixConditioning`: `positive` + `pixels`). Image *guidance* — ControlNet, style and
+    IP-Adapter references — has none of these shapes.
+    """
+    ins = _inputs(node)
+    links = {k for k, v in ins.items() if _is_link(v)}
+    if "conditioning" in links and "latent" in links:
+        return True
+    if ("text" in ins or "prompt" in ins) and any(k.startswith("image") for k in links):
+        return True
+    return "positive" in links and "pixels" in links
 
 
 # --------------------------------------------------------------------------------
@@ -454,6 +489,101 @@ def _find_vae(graph, sampler_id):
 
 
 # --------------------------------------------------------------------------------
+# AI-provenance: the IPTC Digital Source Type, resolved or abstained
+
+# Inputs to follow from a sampler back along its starting latent, in priority order. A sampler or a
+# latent transform carries it in one of the first three; an encoder takes it as pixels, and pixel-space
+# transforms (scaling, cropping) as an image.
+_LATENT_PATH_KEYS = ("latent_image", "latent", "samples", "pixels", "image", "images")
+
+# Conditioning-side inputs of a sampler: classic positive/negative, or a guider (SamplerCustomAdvanced).
+_CONDITIONING_KEYS = ("positive", "negative", "guider", "conditioning")
+
+
+def _next_latent_ref(ins):
+    return next((ins[k] for k in _LATENT_PATH_KEYS if _is_link(ins.get(k))), None)
+
+
+def _trace_latent_origin(graph, sampler_id):
+    """Follow a sampler's starting latent upstream to where it originates.
+
+    Returns ``(origin, samplers)``. ``origin`` is ``"image"`` when the trail reaches a loaded image
+    (img2img via `VAEEncode`; inpainting via `InpaintModelConditioning`), ``"empty"`` when it ends at
+    an empty-latent generator, and None when it ends anywhere else. ``samplers`` lists every sampler
+    passed on the way, starting with ``sampler_id`` — a hires-fix chain has several.
+    """
+    samplers = [sampler_id]
+    ref = _next_latent_ref(_inputs(graph[sampler_id]))
+    seen = {sampler_id}
+    while _is_link(ref) and ref[0] not in seen:
+        nid = ref[0]
+        seen.add(nid)
+        node = graph.get(nid)
+        if node is None:
+            return None, samplers
+        if _is_image_source(node):
+            return "image", samplers
+        if _is_sampler(node):
+            samplers.append(nid)
+        ins = _inputs(node)
+        nxt = _next_latent_ref(ins)
+        if nxt is None:
+            # A trail's end with a `batch_size` is an empty-latent generator: EmptyLatentImage,
+            # EmptySD3LatentImage, EmptyFlux2LatentImage, and the aspect-ratio presets that wrap them.
+            return ("empty" if "batch_size" in ins else None), samplers
+        ref = nxt
+    return None, samplers
+
+
+def _image_edit_node(graph, sampler_ids):
+    """The id of an edit-conditioning node fed by a loaded image, on any of the samplers; else None."""
+    for sid in sampler_ids:
+        ins = _inputs(graph[sid])
+        for key in _CONDITIONING_KEYS:
+            ref = ins.get(key)
+            if not _is_link(ref):
+                continue
+            for nid in sorted(_reachable(graph, ref[0])):
+                if _is_edit_conditioning(graph[nid]) and \
+                        any(_is_image_source(graph[m]) for m in _reachable(graph, nid)):
+                    return nid
+    return None
+
+
+def _image_consumer(graph, sink_id):
+    """The id of a node upstream of the sink that takes a loaded image as input; else None."""
+    upstream = _reachable(graph, sink_id)
+    for nid in sorted(upstream):
+        for v in _inputs(graph[nid]).values():
+            if _is_link(v) and v[0] in upstream and _is_image_source(graph[v[0]]):
+                return nid
+    return None
+
+
+def _classify_source(graph, sink_id, sampler_id):
+    """The IPTC Digital Source Type the graph proves, as ``(term, reason)``; term None = abstain.
+
+    Edited is proven by a loaded image reaching the sampler's starting latent, or by edit conditioning
+    on a loaded image. Created is proven by an empty starting latent with no loaded image anywhere
+    upstream of the output. Anything else — the latent's origin untraceable, or a loaded image used
+    some other way (ControlNet, an IP-Adapter, a post-sampling composite) — abstains.
+    """
+    origin, samplers = _trace_latent_origin(graph, sampler_id)
+    if origin == "image":
+        return SOURCE_EDITED, "the starting latent is encoded from an input image"
+    edit = _image_edit_node(graph, samplers)
+    if edit is not None:
+        return SOURCE_EDITED, f"`{graph[edit].get('class_type')}` conditions the generation on an input image"
+    if origin is None:
+        return None, "could not trace where the starting latent comes from"
+    consumer = _image_consumer(graph, sink_id)
+    if consumer is not None:
+        return None, (f"an input image feeds `{graph[consumer].get('class_type')}`, "
+                      "which chandra does not classify")
+    return SOURCE_CREATED, "starts from an empty latent, with no input image"
+
+
+# --------------------------------------------------------------------------------
 # Top-level
 
 def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = None) -> Recipe:
@@ -461,13 +591,13 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
     recipe = Recipe(width=width, height=height)
 
     sink_id = _pick_sink(graph, recipe.warnings)
-    if sink_id is None:
-        recipe.pipelines = describe_workflow(graph)  # not a generation — describe the pipelines instead
-        return recipe
-    sampler_id = _find_sampler(graph, sink_id, recipe.warnings)
+    sampler_id = _find_sampler(graph, sink_id, recipe.warnings) if sink_id is not None else None
     if sampler_id is None:
         recipe.pipelines = describe_workflow(graph)  # not a generation — describe the pipelines instead
+        recipe.digital_source_type_reason = "no sampler upstream of the output: not a generation"
         return recipe
+    recipe.digital_source_type, recipe.digital_source_type_reason = \
+        _classify_source(graph, sink_id, sampler_id)
 
     sampler = graph[sampler_id]
     ins = _inputs(sampler)
@@ -539,6 +669,7 @@ def format_recipe(recipe: Recipe) -> str:
                  f"seed: {recipe.seed}")
     for pipe in recipe.pipelines:  # non-generation workflow: one pipeline per output image
         lines.append(f"output:   {' → '.join(pipe)}")
+    lines.append(f"source:   {format_source_type(recipe)}")
     for w in recipe.warnings:
         lines.append(f"  ! {w}")
     return "\n".join(lines)
@@ -595,3 +726,10 @@ def format_workflow_description(recipe: Recipe) -> str:
     if recipe.width and recipe.height:
         lines += ["", f"Size:     {recipe.width}x{recipe.height}"]
     return "\n".join(lines)
+
+
+def format_source_type(recipe: Recipe) -> str:
+    """The resolved IPTC Digital Source Type with its reason, or that it abstained and why."""
+    if recipe.digital_source_type is None:
+        return f"abstained ({recipe.digital_source_type_reason})"
+    return f"{recipe.digital_source_type} ({recipe.digital_source_type_reason})"

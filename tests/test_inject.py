@@ -4,6 +4,7 @@ These run against the committed, anonymized fixtures, so they run everywhere (CI
 """
 
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -87,3 +88,77 @@ def test_inject_with_both_layers_foreign_writes_nothing(clean, capsys):
     assert cli.main(["inject", str(clean)]) == 0
     assert clean.read_bytes() == before
     assert "nothing injected" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------------
+# IPTC Digital Source Type in the XMP packet
+
+_DST_URI = "http://cv.iptc.org/newscodes/digitalsourcetype/"
+
+
+def _xmp(path):
+    return _fields(path).get(pngchunks.XMP_KEYWORD)
+
+
+def test_inject_marks_ai_by_default(clean):
+    assert cli.main(["inject", str(clean)]) == 0
+    assert f">{_DST_URI}trainedAlgorithmicMedia<" in _xmp(clean)
+
+
+def test_inject_no_mark_ai_leaves_the_property_out(clean):
+    assert cli.main(["inject", "--no-mark-ai", str(clean)]) == 0
+    packet = _xmp(clean)
+    assert "dc:description" in packet and "DigitalSourceType" not in packet
+
+
+def test_inject_no_xmp_skips_the_mark_too(clean):
+    assert cli.main(["inject", "--no-xmp", str(clean)]) == 0
+    assert _xmp(clean) is None
+
+
+def test_inject_abstains_on_non_generation(tmp_path):
+    png = tmp_path / "tools.png"
+    shutil.copy(FIXTURES_DIR / "tools-rembg.png", png)
+    assert cli.main(["inject", str(png)]) == 0
+    packet = _xmp(png)
+    assert "dc:description" in packet and "DigitalSourceType" not in packet
+
+
+@pytest.mark.parametrize("flags", [[], ["--no-mark-ai"]], ids=["marked", "unmarked"])
+def test_inject_eject_round_trip_is_byte_identical(clean, flags):
+    original = clean.read_bytes()
+    assert cli.main(["inject", *flags, str(clean)]) == 0
+    assert clean.read_bytes() != original
+    assert cli.main(["eject", str(clean)]) == 0
+    assert clean.read_bytes() == original
+
+
+def test_foreign_digital_source_type_survives_without_force(clean):
+    # A DigitalSourceType another tool wrote lives in that tool's XMP packet, which inject leaves alone.
+    foreign = ('<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF '
+               'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" '
+               'xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/"><Iptc4xmpExt:DigitalSourceType>'
+               f'{_DST_URI}digitalCapture</Iptc4xmpExt:DigitalSourceType></rdf:Description></rdf:RDF>'
+               '</x:xmpmeta><?xpacket end="w"?>')
+    _stamp_foreign(clean, xmp=foreign)
+    assert cli.main(["inject", str(clean)]) == 0
+    assert _xmp(clean) == foreign
+
+    assert cli.main(["inject", "--force", str(clean)]) == 0
+    packet = _xmp(clean)
+    assert "digitalCapture" not in packet and f"{_DST_URI}trainedAlgorithmicMedia" in packet
+
+
+def test_show_reports_the_source_type(capsys):
+    assert cli.main(["show", str(FIXTURES_DIR / "flux2-img2img.png")]) == 0
+    assert "DigitalSourceType: compositeWithTrainedAlgorithmicMedia (" in capsys.readouterr().out
+    assert cli.main(["show", str(FIXTURES_DIR / "tools-rembg.png")]) == 0
+    assert "DigitalSourceType: abstained (" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(shutil.which("exiftool") is None, reason="exiftool not installed")
+def test_exiftool_reads_the_digital_source_type(clean):
+    assert cli.main(["inject", str(clean)]) == 0
+    out = subprocess.run(["exiftool", "-s3", "-XMP-iptcExt:DigitalSourceType", str(clean)],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    assert out == f"{_DST_URI}trainedAlgorithmicMedia"

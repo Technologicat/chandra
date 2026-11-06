@@ -135,6 +135,32 @@ ComfyUI itself never writes LoRAs into the prompt text, so the human-readable vi
 clean and list them separately (`LoRA: name (strength X)` in the description and `chandra show --recipe`).
 The inlined-into-prompt form is a data interchange convention.
 
+### Marking images as AI-generated
+
+The XMP packet also carries the [IPTC Digital Source Type](https://iptc.org/standards/photo-metadata/iptc-standard/#digital-source-type)
+(`Iptc4xmpExt:DigitalSourceType`) — the standard, machine-readable field that says an image was made
+with generative AI, and the one platforms look for instead of reading SD-specific metadata. `inject`
+writes one of two values, from what the ComfyUI graph shows:
+
+- **`trainedAlgorithmicMedia`** ("Created using Generative AI"): the sampler starts from an empty
+  latent, and no input image enters the workflow.
+- **`compositeWithTrainedAlgorithmicMedia`** ("Edited using Generative AI"): an input image is encoded
+  into the starting latent (img2img, inpainting, outpainting), or conditions the generation as edit
+  models use it (Flux.2 reference latents, Qwen-Image-Edit).
+
+Where the graph doesn't prove either, chandra writes nothing rather than guess: images that aren't
+generations (background removers, pose detectors, …), and generations that use an input image some
+other way, such as ControlNet guidance. `chandra show` prints the value it would write, or why it
+abstained.
+
+This is on by default; `--no-mark-ai` leaves it out (and `--no-xmp` skips it along with the rest of the
+XMP packet). It adds nothing the file didn't already reveal — the embedded workflow shows the image was
+generated — but makes that legible outside the SD ecosystem.
+
+The property is an unsigned signal, not proof: any XMP-aware tool can change it, and any tool that
+strips metadata removes it. Signed provenance is what [C2PA](https://c2pa.org/) is for; chandra doesn't
+write C2PA manifests.
+
 ## Undoing an inject (`eject`)
 
 Changed your mind? `chandra eject` is the inverse of `inject`: it removes the `parameters` chunk and

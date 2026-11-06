@@ -310,6 +310,11 @@ if CivitAI turns out to want exactly that for LoRAs, switch the LoRA length, mod
 - **`inject` writes in place, no backup.** The chunk insertion is lossless surgery (below) — the
   original image bytes and existing chunks are preserved verbatim — so an in-place rewrite is safe
   and a backup is just clutter.
+- **`inject` doesn't overwrite what it didn't write.** Each layer is checked for chandra's stamp
+  (below) before writing: absent or ours, it is (re)written; foreign — a `parameters` block from
+  A1111/Forge, another tool's XMP packet — it is left in place with a warning, and the other layer is
+  still written. `inject --force` overwrites regardless. The same stamp check `eject` uses, applied
+  from the writing side.
 - **`eject` is the exact inverse of `inject`.** It removes the `parameters` chunk and the XMP
   `dc:description` and nothing else, so an `inject` followed by an `eject` restores the file
   byte-for-byte (chandra-written PNGs carry correct CRCs, so the untouched chunks re-serialize
@@ -483,6 +488,11 @@ writes it by default, alongside the `parameters` chunk; `--no-xmp` opts out. The
 SD Prompt Reader-style tools ignore and general viewers honour, so the two metadata layers
 (`parameters` for SD tools, XMP for viewers) coexist cleanly. pngcheck confirms the chunk and a
 clean file.
+
+The same `rdf:Description` also carries the **IPTC Digital Source Type**
+(`Iptc4xmpExt:DigitalSourceType`, marking the image as created or edited with generative AI) when the
+graph proves which; `--no-mark-ai` opts out. The classification, its abstain cases, and the rationale
+for the default are in `briefs/done/digital-source-type.md`; the code is `analyze._classify_source`.
 
 The description text is a **clean rendering of the full recipe** (`analyze.format_description`):
 the same information as `chandra show --recipe`, but with real line breaks and no `repr()` quoting,

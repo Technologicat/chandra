@@ -145,3 +145,47 @@ def test_img2img_has_partial_denoise():
     r = _recipe("chroma1-hd-img2img.png")
     assert float(r.denoise) < 1.0
     assert "Denoising strength" in synthesize.synthesize(r)
+
+
+# --------------------------------------------------------------------------------
+# IPTC Digital Source Type, one row of the mapping per fixture (golden: read off how each workflow
+# was built, not off the classifier)
+
+_CREATED, _EDITED = "trainedAlgorithmicMedia", "compositeWithTrainedAlgorithmicMedia"
+_SOURCE_TYPES = {
+    "chroma1-hd-img2img.png": _EDITED,
+    "chroma1-hd-inpaint.png": _EDITED,
+    "chroma1-hd-txt2img.png": _CREATED,
+    "ernie-img2img.png": _EDITED,
+    "ernie-inpaint.png": _EDITED,
+    "ernie-txt2img.png": _CREATED,
+    "flux2-edit-inpaint.png": _EDITED,
+    "flux2-edit.png": _EDITED,              # empty latent; the input image arrives as ReferenceLatent
+    "flux2-img2img.png": _EDITED,
+    "flux2-inpaint.png": _EDITED,
+    "flux2-txt2img.png": _CREATED,
+    "illustrious-img2img.png": _EDITED,
+    "illustrious-inpaint.png": _EDITED,
+    "illustrious-txt2img.png": _CREATED,
+    "qwen-edit-2511-basic.png": _EDITED,    # empty latent; the input image arrives via the edit encoder
+    "qwen-edit-2511-inpaint.png": _EDITED,
+    "qwen2512-img2img.png": _EDITED,
+    "qwen2512-inpaint.png": _EDITED,
+    "qwen2512-txt2img.png": _CREATED,
+    "tools-pose-detector.png": None,        # no sampler: abstain
+    "tools-rembg.png": None,
+    "z-image-img2img.png": _EDITED,
+    "z-image-inpaint.png": _EDITED,
+    "z-image-txt2img.png": _CREATED,
+}
+
+
+def test_every_fixture_has_a_source_type_row():
+    assert {p.name for p in FIXTURES} == set(_SOURCE_TYPES)
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.name)
+def test_fixture_source_type(path):
+    recipe = extract_recipe(path)
+    assert recipe.digital_source_type == _SOURCE_TYPES[path.name]
+    assert recipe.digital_source_type_reason                 # a value or an abstention, always explained
