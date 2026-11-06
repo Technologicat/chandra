@@ -161,7 +161,13 @@ resolves it: **AI Prompt Information** (`Iptc4xmpExt:AIPromptInformation`) holds
 `Positive:` and `Negative:`, and **AI System Used** (`Iptc4xmpExt:AISystemUsed`) the model's files —
 the generator, then the VAE and text encoders when they're separate files, as modern models (Flux,
 Qwen, …) load them — named as in the `parameters` chunk. LoRAs aren't listed there; their strengths
-have no place in a one-line field. The other two AI properties of that release, *AI
+have no place in a one-line field.
+
+So the field reads as a list of files, where the standard's examples are product names ("Google
+Gemini"). A hosted service is one product whose recipe the vendor fixes; an open-weight system is
+assembled by whoever runs it, and the same generator with another text encoder, quantization, or VAE is
+a different system. The workflow records only the file names, so that is what chandra writes — no
+lookup from file names to model families, which would be a guess. The other two AI properties of that release, *AI
 Prompt Writer Name* and *AI System Version Used*, are never written: no workflow records them.
 
 This is all on by default; `--no-mark-ai` leaves the whole group out (and `--no-xmp` skips it along with
