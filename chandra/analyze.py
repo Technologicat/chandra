@@ -334,21 +334,25 @@ def _pick_sink(graph, warnings):
 _IMAGE_PATH_KEYS = ("samples", "latent", "inpainted_image", "stitched_image", "image", "images")
 
 
-def _next_image_ref(ins):
-    """The link to follow toward the sampler: a known image/latent input, else a generic one.
+def _next_image_ref(graph, ins):
+    """The link to follow toward the sampler, among a node's inputs; None if there is none.
 
-    Source-side inputs (mask, vae, the original `pixels`/`stitcher`) are excluded so we follow the
-    *produced* image, not the inputs that fed the inpaint/img2img region.
+    Candidates in priority order: the known image/latent inputs, then any image/latent-named input
+    other than the source side (mask, vae, the original `pixels`/`stitcher`, which fed the inpaint or
+    img2img region rather than producing the output), then any input at all. The first candidate with
+    a sampler upstream wins — that is what tells the generated image from the backdrop in a composite,
+    whose input names (`destination`/`source`, `image1`/`image2`) don't say. With no sampler upstream
+    of any, the first named candidate, so the walk ends where it did and reports it.
     """
-    for key in _IMAGE_PATH_KEYS:
-        if _is_link(ins.get(key)):
-            return ins[key]
-    for k, v in ins.items():
-        kl = k.lower()
-        if _is_link(v) and any(t in kl for t in ("image", "latent", "sample")) \
-                and not any(t in kl for t in ("mask", "vae", "pixel", "stitch")):
-            return v
-    return None
+    named = [ins[k] for k in _IMAGE_PATH_KEYS if _is_link(ins.get(k))]
+    named += [v for k, v in ins.items()
+              if _is_link(v) and any(t in k.lower() for t in ("image", "latent", "sample"))
+              and not any(t in k.lower() for t in ("mask", "vae", "pixel", "stitch"))]
+    candidates = named + [v for v in ins.values() if _is_link(v)]
+    for ref in candidates:
+        if any(_is_sampler(graph[n]) for n in _reachable(graph, ref[0])):
+            return ref
+    return named[0] if named else None
 
 
 def _find_sampler(graph, sink_id, warnings):
@@ -366,7 +370,7 @@ def _find_sampler(graph, sink_id, warnings):
             break
         if _is_sampler(cur):
             return nid
-        ref = _next_image_ref(_inputs(cur))
+        ref = _next_image_ref(graph, _inputs(cur))
     warnings.append("could not locate a sampler upstream of the sink")
     return None
 
@@ -523,7 +527,7 @@ def _find_vae(graph, sink_id, sampler_id):
         ins = _inputs(graph.get(ref[0]))
         if _is_link(ins.get("vae")):
             return _resolve_vae(graph, ins["vae"])
-        ref = _next_image_ref(ins)
+        ref = _next_image_ref(graph, ins)
     ins = _inputs(graph.get(sampler_id))
     return _resolve_vae(graph, ins.get("optional_vae") or ins.get("vae"))
 

@@ -32,6 +32,8 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 - **A separate VAE is now named in stock ComfyUI graphs**, where a plain `KSampler` feeds a `VAEDecode`.
   - Up to v0.3.0 the VAE was found only on samplers that decode their own output (`KSampler (Efficient)`), so elsewhere `VAE:` was missing from the `parameters` chunk and the description.
+- **A generated image composited onto another after sampling is now analyzed as a generation.**
+  - Up to v0.3.0, a graph that pasted or blended its output into a loaded image (`ImageCompositeMasked`, or `ImageBlend` with the generated image second) was reported as having no sampler, so `show`/`inject` gave no recipe.
 
 ---
 

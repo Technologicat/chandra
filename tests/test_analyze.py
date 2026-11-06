@@ -156,6 +156,30 @@ def test_vae_found_at_the_decoder_inside_inpaint_stitch():
     assert analyze.analyze(g).vae == "vae.pt"
 
 
+def test_find_sampler_through_composite_by_structure_not_input_name():
+    # ImageCompositeMasked's inputs say nothing about which one is the generated image; the one that
+    # leads back to a sampler is.
+    g = _stock_graph()
+    g["save"]["inputs"]["images"] = ["comp", 0]
+    g["comp"] = {"class_type": "ImageCompositeMasked", "inputs": {
+        "x": 0, "y": 0, "destination": ["load", 0], "source": ["dec", 0]}}
+    g["load"] = {"class_type": "LoadImage", "inputs": {"image": "backdrop.png"}}
+    r = analyze.analyze(g)
+    assert r.sampler_class == "KSampler" and r.positive == "a cat"
+    assert r.vae == "vae.pt"                               # the VAE walk follows the same path
+    assert r.digital_source_type is None                   # a post-sampling composite still abstains
+
+
+def test_find_sampler_prefers_the_input_that_leads_to_a_sampler():
+    # Both inputs are image-named; the loaded one comes first, and is a dead end.
+    g = _stock_graph()
+    g["save"]["inputs"]["images"] = ["blend", 0]
+    g["blend"] = {"class_type": "ImageBlend", "inputs": {
+        "blend_factor": 0.5, "blend_mode": "normal", "image1": ["load", 0], "image2": ["dec", 0]}}
+    g["load"] = {"class_type": "LoadImage", "inputs": {"image": "backdrop.png"}}
+    assert analyze.analyze(g).sampler_class == "KSampler"
+
+
 def test_walk_model_collects_lora_chain():
     # Three chained LoRAs -> base loader: the walk handles arbitrary depth, in order.
     graph = {
