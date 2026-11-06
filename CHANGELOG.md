@@ -28,6 +28,11 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
   - Each layer is now checked separately for chandra's stamp, like `eject` already did; a foreign one is skipped with a warning, and the other layer is still written.
   - `--force` overwrites them anyway.
 
+### Fixed
+
+- **A separate VAE is now named in stock ComfyUI graphs**, where a plain `KSampler` feeds a `VAEDecode`.
+  - Up to v0.3.0 the VAE was found only on samplers that decode their own output (`KSampler (Efficient)`), so elsewhere `VAE:` was missing from the `parameters` chunk and the description.
+
 ---
 
 ## 0.3.0 — First light — 2026-08-18

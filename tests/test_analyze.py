@@ -125,6 +125,37 @@ def test_trace_conditioning_through_reference_latent():
     assert analyze._trace_conditioning(graph, ["ref", 0]) == "edit this"
 
 
+def _stock_graph():
+    """The txt2img graph as stock ComfyUI wires it: a plain KSampler, decoded by a separate VAEDecode."""
+    g = _txt2img_graph()
+    g["ks"]["class_type"] = "KSampler"
+    del g["ks"]["inputs"]["optional_vae"]
+    g["save"]["inputs"]["images"] = ["dec", 0]
+    g["dec"] = {"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}}
+    return g
+
+
+def test_vae_found_at_the_decoder_of_a_stock_graph():
+    r = analyze.analyze(_stock_graph())
+    assert r.sampler_class == "KSampler"
+    assert r.vae == "vae.pt"
+
+
+def test_vae_baked_into_the_checkpoint_is_not_a_separate_file():
+    g = _stock_graph()
+    g["dec"]["inputs"]["vae"] = ["ckpt", 2]                # CheckpointLoaderSimple's VAE output
+    assert analyze.analyze(g).vae is None
+
+
+def test_vae_found_at_the_decoder_inside_inpaint_stitch():
+    g = _stock_graph()
+    g["save"]["inputs"]["images"] = ["stitch", 0]
+    g["stitch"] = {"class_type": "InpaintStitchImproved", "inputs": {"stitcher": ["crop", 0], "inpainted_image": ["dec", 0]}}
+    g["crop"] = {"class_type": "InpaintCropImproved", "inputs": {"image": ["load", 0], "mask": ["load", 1]}}
+    g["load"] = {"class_type": "LoadImage", "inputs": {"image": "photo.png"}}
+    assert analyze.analyze(g).vae == "vae.pt"
+
+
 def test_walk_model_collects_lora_chain():
     # Three chained LoRAs -> base loader: the walk handles arbitrary depth, in order.
     graph = {

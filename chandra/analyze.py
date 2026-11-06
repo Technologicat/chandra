@@ -489,10 +489,12 @@ def _find_text_encoders(graph, sampler_id):
     return _walk_clip(graph, _inputs(graph[enc_id]).get("clip"))
 
 
-def _find_vae(graph, sampler_id):
-    """Best-effort VAE name from the sampler's optional_vae / vae input."""
-    ins = _inputs(graph.get(sampler_id))
-    ref = ins.get("optional_vae") or ins.get("vae")
+def _resolve_vae(graph, ref):
+    """Follow a VAE link back to its loader's `vae_name`; None when it ends elsewhere.
+
+    A VAE baked into a checkpoint ends at the checkpoint loader, which has no `vae_name`: there is no
+    separate VAE file to name.
+    """
     seen = set()
     while _is_link(ref) and ref[0] not in seen:
         nid = ref[0]
@@ -505,6 +507,25 @@ def _find_vae(graph, sampler_id):
             return _resolve_string(graph, nins["vae_name"])
         ref = nins.get("vae") or nins.get("samples")
     return None
+
+
+def _find_vae(graph, sink_id, sampler_id):
+    """The VAE that decoded the output image, by file name; None if none resolves.
+
+    First a decoder on the produced-image path between the sink and the sampler (stock ComfyUI's
+    `VAEDecode`, also inside an inpaint stitch); then the sampler's own `optional_vae` / `vae` input,
+    for samplers that decode their output themselves (`KSampler (Efficient)`).
+    """
+    ref = _inputs(graph.get(sink_id)).get("images")
+    seen = set()
+    while _is_link(ref) and ref[0] not in seen and ref[0] != sampler_id:
+        seen.add(ref[0])
+        ins = _inputs(graph.get(ref[0]))
+        if _is_link(ins.get("vae")):
+            return _resolve_vae(graph, ins["vae"])
+        ref = _next_image_ref(ins)
+    ins = _inputs(graph.get(sampler_id))
+    return _resolve_vae(graph, ins.get("optional_vae") or ins.get("vae"))
 
 
 # --------------------------------------------------------------------------------
@@ -659,7 +680,7 @@ def analyze(graph: dict, width: Optional[int] = None, height: Optional[int] = No
 
     # Model + LoRAs, and VAE.
     recipe.model, recipe.loras = _walk_model(graph, ins.get("model"))
-    recipe.vae = _find_vae(graph, sampler_id)
+    recipe.vae = _find_vae(graph, sink_id, sampler_id)
     recipe.text_encoders = _find_text_encoders(graph, sampler_id)
 
     if recipe.positive is None and recipe.negative is None:

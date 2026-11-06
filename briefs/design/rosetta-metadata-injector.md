@@ -179,8 +179,10 @@ but the *input-name contract* is stable, so we match on that. The walk:
    `lora_name`, `strength_model`, follow `model`). Real workflows chain several; the loop runs
    until a base-loader role: `CheckpointLoaderSimple.ckpt_name`, `LoaderGGUF`/`UnetLoaderGGUF`
    (`gguf_name`/`unet_name`), `unCLIPCheckpointLoader`, etc.
-6. **Extract VAE** (extra): the sampler's `optional_vae` or the VAE-decode node's `vae` → a
-   VAE-loader role (`vae_name`). Recorded as an extra field, not required.
+6. **Extract VAE** (extra): the `vae` of a decoder on the produced-image path (stock `VAEDecode`,
+   also inside an inpaint stitch), else the sampler's own `optional_vae` (samplers that decode
+   themselves) → a VAE-loader role (`vae_name`). A VAE baked into the checkpoint has no `vae_name`
+   and stays unnamed. Recorded as an extra field, not required.
 7. **Extract text encoder(s)** (extra): from the positive text-encoder node, follow its `clip` link
    back through any passthrough (LoRA, `CLIPSetLastLayer`, …) to the loader, collecting the
    `clip_name*` file(s) — `DualCLIPLoader` exposes two. Empty when CLIP is baked into the checkpoint.
