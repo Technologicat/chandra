@@ -146,14 +146,19 @@ def _ours_xmp(packet: str) -> bool:
 def _ai_provenance(recipe):
     """The IPTC AI-provenance properties the recipe resolves, as `xmp.build` keyword arguments.
 
-    A value the graph doesn't resolve is None, and `xmp.build` leaves it out. *AI System Used* is the
-    checkpoint as the `parameters` chunk's `Model:` field names it. *AI Prompt Writer Name* and *AI
-    System Version Used* are never written: no graph records either.
+    A value the graph doesn't resolve is None, and `xmp.build` leaves it out. *AI System Used* lists
+    the model's files — the generator, then the VAE and the separate text encoders where the graph has
+    them — named as in the `parameters` chunk; None when the generator is unresolved. *AI Prompt Writer
+    Name* and *AI System Version Used* are never written: no graph records either.
     """
+    system = None
+    if recipe.model:
+        files = [recipe.model] + ([recipe.vae] if recipe.vae else []) + list(recipe.text_encoders)
+        system = ", ".join(_synthesize.display_name(f) for f in files)
     return {
         "digital_source_type": recipe.digital_source_type,
         "ai_prompt_information": _analyze.format_prompt_information(recipe),
-        "ai_system_used": _synthesize.display_name(recipe.model) if recipe.model else None,
+        "ai_system_used": system,
     }
 
 

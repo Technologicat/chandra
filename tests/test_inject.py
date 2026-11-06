@@ -106,7 +106,8 @@ def test_inject_marks_ai_by_default(clean):
     assert f">{_DST_URI}trainedAlgorithmicMedia<" in packet
     assert ("<Iptc4xmpExt:AIPromptInformation>Positive:\nscrubbed positive prompt\n\n"
             "Negative:\nscrubbed negative prompt</Iptc4xmpExt:AIPromptInformation>") in packet
-    assert "<Iptc4xmpExt:AISystemUsed>scrubbed-checkpoint</Iptc4xmpExt:AISystemUsed>" in packet
+    assert ("<Iptc4xmpExt:AISystemUsed>scrubbed-checkpoint, flux2-vae, Qwen3-8B-UD-Q4_K_XL"
+            "</Iptc4xmpExt:AISystemUsed>") in packet       # generator, VAE, text encoder
     assert "AIPromptWriterName" not in packet and "AISystemVersionUsed" not in packet  # never in a graph
 
 
@@ -165,6 +166,12 @@ def test_show_reports_the_source_type(capsys):
 
 def test_show_reports_the_ai_system(capsys):
     assert cli.main(["show", str(FIXTURES_DIR / "flux2-img2img.png")]) == 0
+    assert "AISystemUsed: scrubbed-checkpoint, flux2-vae, Qwen3-8B-UD-Q4_K_XL\n" in capsys.readouterr().out
+
+
+def test_ai_system_of_an_all_in_one_checkpoint_is_the_checkpoint(capsys):
+    # VAE and CLIP baked into the checkpoint: one file is the whole system.
+    assert cli.main(["show", str(FIXTURES_DIR / "illustrious-txt2img.png")]) == 0
     assert "AISystemUsed: scrubbed-checkpoint\n" in capsys.readouterr().out
 
 
@@ -177,5 +184,5 @@ def test_exiftool_reads_the_iptc_properties(clean):
                               capture_output=True, text=True, check=True).stdout.strip()
 
     assert read("DigitalSourceType") == f"{_DST_URI}trainedAlgorithmicMedia"
-    assert read("AISystemUsed") == "scrubbed-checkpoint"
+    assert read("AISystemUsed") == "scrubbed-checkpoint, flux2-vae, Qwen3-8B-UD-Q4_K_XL"
     assert read("AIPromptInformation").startswith("Positive:")

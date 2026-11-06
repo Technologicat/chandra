@@ -158,8 +158,10 @@ or why it abstained.
 
 Alongside it go two properties from IPTC Photo Metadata 2025.1, each written when the graph
 resolves it: **AI Prompt Information** (`Iptc4xmpExt:AIPromptInformation`) holds the prompts, labelled
-`Positive:` and `Negative:`, and **AI System Used** (`Iptc4xmpExt:AISystemUsed`) the checkpoint, named
-as the `parameters` chunk's `Model:` field names it. The other two AI properties of that release, *AI
+`Positive:` and `Negative:`, and **AI System Used** (`Iptc4xmpExt:AISystemUsed`) the model's files —
+the generator, then the VAE and text encoders when they're separate files, as modern models (Flux,
+Qwen, …) load them — named as in the `parameters` chunk. LoRAs aren't listed there; their strengths
+have no place in a one-line field. The other two AI properties of that release, *AI
 Prompt Writer Name* and *AI System Version Used*, are never written: no workflow records them.
 
 This is all on by default; `--no-mark-ai` leaves the whole group out (and `--no-xmp` skips it along with
