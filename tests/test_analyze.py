@@ -382,21 +382,53 @@ def test_source_type_hires_chain_is_created():
     assert r.digital_source_type == analyze.SOURCE_CREATED
 
 
-def test_source_type_controlnet_abstains():
-    # An input image guiding through ControlNet is neither proof of an edit nor of a pure creation.
+def test_source_type_controlnet_guided_is_created():
+    # An input image that only guides through ControlNet (here via a preprocessor) doesn't end up in
+    # the output: the generation is still a creation.
     g = _txt2img_graph()
     g["ks"]["inputs"]["positive"] = ["cn", 0]
     g["ks"]["inputs"]["negative"] = ["cn", 1]
     g = _with(g,
               cn={"class_type": "ControlNetApplyAdvanced", "inputs": {
                   "strength": 1.0, "positive": ["pos", 0], "negative": ["neg", 0],
-                  "control_net": ["cnl", 0], "image": ["load", 0]}},
+                  "control_net": ["cnl", 0], "image": ["pose", 0]}},
               cnl={"class_type": "ControlNetLoader", "inputs": {"control_net_name": "pose.safetensors"}},
-              load={"class_type": "LoadImage", "inputs": {"image": "pose.png"}})
+              pose={"class_type": "DWPreprocessor", "inputs": {"image": ["load", 0]}},
+              load={"class_type": "LoadImage", "inputs": {"image": "photo.png"}})
     r = analyze.analyze(g)
     assert r.positive == "a cat"                         # the conditioning still traced through
-    assert r.digital_source_type is None
+    assert r.digital_source_type == analyze.SOURCE_CREATED
     assert "ControlNetApplyAdvanced" in r.digital_source_type_reason
+
+
+def test_source_type_ipadapter_guided_is_created():
+    g = _txt2img_graph()
+    g["ks"]["inputs"]["model"] = ["ipa", 0]
+    g = _with(g,
+              ipa={"class_type": "IPAdapterAdvanced", "inputs": {
+                  "weight": 0.8, "model": ["ckpt", 0], "ipadapter": ["ipl", 1], "image": ["load", 0]}},
+              ipl={"class_type": "IPAdapterUnifiedLoader", "inputs": {"preset": "PLUS", "model": ["ckpt", 0]}},
+              load={"class_type": "LoadImage", "inputs": {"image": "face.png"}})
+    r = analyze.analyze(g)
+    assert r.model == "model.safetensors"                # the model walk still reaches the checkpoint
+    assert r.digital_source_type == analyze.SOURCE_CREATED
+    assert "IPAdapterAdvanced" in r.digital_source_type_reason
+
+
+def test_source_type_post_sampling_composite_abstains():
+    # A generated image pasted onto a loaded one after sampling: neither a pure creation nor an edit
+    # the sampler made. The guidance exemption must not cover it.
+    g = _txt2img_graph()
+    g["save"]["inputs"]["images"] = ["comp", 0]
+    g = _with(g,
+              comp={"class_type": "ImageBlend", "inputs": {
+                  "blend_factor": 0.5, "blend_mode": "normal", "image1": ["dec", 0], "image2": ["load", 0]}},
+              dec={"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}},
+              load={"class_type": "LoadImage", "inputs": {"image": "backdrop.png"}})
+    r = analyze.analyze(g)
+    assert r.sampler_class                               # the sampler was found through the composite
+    assert r.digital_source_type is None
+    assert "ImageBlend" in r.digital_source_type_reason
 
 
 def test_source_type_controlnet_with_img2img_is_edited():

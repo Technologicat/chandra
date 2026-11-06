@@ -143,15 +143,18 @@ with generative AI, and the one platforms look for instead of reading SD-specifi
 writes one of two values, from what the ComfyUI graph shows:
 
 - **`trainedAlgorithmicMedia`** ("Created using Generative AI"): the sampler starts from an empty
-  latent, and no input image enters the workflow.
+  latent, and any input image only guides it (below).
 - **`compositeWithTrainedAlgorithmicMedia`** ("Edited using Generative AI"): an input image is encoded
   into the starting latent (img2img, inpainting, outpainting), or conditions the generation as edit
   models use it (Flux.2 reference latents, Qwen-Image-Edit).
 
+An input image that only *guides* the generation — a ControlNet pose or depth map, an IP-Adapter or
+Flux Redux reference — doesn't become part of the output, so that still counts as created.
+
 Where the graph doesn't prove either, chandra writes nothing rather than guess: images that aren't
 generations (background removers, pose detectors, …), and generations that use an input image some
-other way, such as ControlNet guidance. `chandra show` prints the value it would write, or why it
-abstained.
+other way, such as compositing it in after sampling. `chandra show` prints the value it would write,
+or why it abstained.
 
 This is on by default; `--no-mark-ai` leaves it out (and `--no-xmp` skips it along with the rest of the
 XMP packet). It adds nothing the file didn't already reveal — the embedded workflow shows the image was

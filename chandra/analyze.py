@@ -106,6 +106,10 @@ def _is_base_loader_field(name: str) -> bool:
 
 def _is_image_source(node) -> bool:
     """A node that brings an image file into the graph: `LoadImage`, `LoadImageMask`, and kin."""
+    # Recognized by name, the one predicate here that is: an image loader has no input shape to tell
+    # it by (a filename literal, nothing linked). So a loader named without both words goes unseen.
+    # On the latent path that's harmless — the trail ends at it without a `batch_size` and the
+    # classifier abstains — but one feeding only the conditioning would let a graph read as created.
     ct = node.get("class_type", "").lower()
     if any(_is_base_loader_field(k) for k in _inputs(node)):  # e.g. ImageOnlyCheckpointLoader: a model
         return False
@@ -118,8 +122,8 @@ def _is_edit_conditioning(node) -> bool:
     Three shapes: a reference latent attached to conditioning (`ReferenceLatent`: `conditioning` +
     `latent`); a text encoder that also takes images (`TextEncodeQwenImageEdit*`: `prompt` + `image*`);
     and conditioning built from the source pixels (`InpaintModelConditioning`,
-    `InstructPixToPixConditioning`: `positive` + `pixels`). Image *guidance* — ControlNet, style and
-    IP-Adapter references — has none of these shapes.
+    `InstructPixToPixConditioning`: `positive` + `pixels`). Image guidance (`_is_image_guidance`) has
+    none of these shapes.
     """
     ins = _inputs(node)
     links = {k for k, v in ins.items() if _is_link(v)}
@@ -128,6 +132,21 @@ def _is_edit_conditioning(node) -> bool:
     if ("text" in ins or "prompt" in ins) and any(k.startswith("image") for k in links):
         return True
     return "positive" in links and "pixels" in links
+
+
+# The inputs through which an image-guidance node passes the generation on: the conditioning it
+# modifies (ControlNet, Redux) or the model it patches (IP-Adapter). Its other inputs are the guide.
+_GUIDANCE_PASSTHROUGH_KEYS = ("positive", "negative", "conditioning", "model")
+
+
+def _is_image_guidance(node) -> bool:
+    """A node that steers a generation by an image without the image becoming part of the output.
+
+    ControlNet (`control_net` input), IP-Adapter (`ipadapter`), and style models such as Flux Redux
+    (`style_model`).
+    """
+    links = {k for k, v in _inputs(node).items() if _is_link(v)}
+    return bool(links & {"control_net", "ipadapter", "style_model"})
 
 
 # --------------------------------------------------------------------------------
@@ -550,9 +569,27 @@ def _image_edit_node(graph, sampler_ids):
     return None
 
 
-def _image_consumer(graph, sink_id):
-    """The id of a node upstream of the sink that takes a loaded image as input; else None."""
-    upstream = _reachable(graph, sink_id)
+def _upstream_past_guidance(graph, start_id):
+    """Like `_reachable`, but entering an image-guidance node only through its passthrough inputs.
+
+    Returns ``(upstream, guides)``: the node ids reached, and those of the guidance nodes among them.
+    """
+    seen, guides, stack = set(), set(), [start_id]
+    while stack:
+        nid = stack.pop()
+        if nid in seen or nid not in graph:
+            continue
+        seen.add(nid)
+        ins = _inputs(graph[nid])
+        if _is_image_guidance(graph[nid]):
+            guides.add(nid)
+            ins = {k: v for k, v in ins.items() if k in _GUIDANCE_PASSTHROUGH_KEYS}
+        stack.extend(v[0] for v in ins.values() if _is_link(v))
+    return seen, guides
+
+
+def _image_consumer(graph, upstream):
+    """The id of a node among `upstream` that takes a loaded image as input; else None."""
     for nid in sorted(upstream):
         for v in _inputs(graph[nid]).values():
             if _is_link(v) and v[0] in upstream and _is_image_source(graph[v[0]]):
@@ -564,9 +601,9 @@ def _classify_source(graph, sink_id, sampler_id):
     """The IPTC Digital Source Type the graph proves, as ``(term, reason)``; term None = abstain.
 
     Edited is proven by a loaded image reaching the sampler's starting latent, or by edit conditioning
-    on a loaded image. Created is proven by an empty starting latent with no loaded image anywhere
-    upstream of the output. Anything else — the latent's origin untraceable, or a loaded image used
-    some other way (ControlNet, an IP-Adapter, a post-sampling composite) — abstains.
+    on a loaded image. Created is proven by an empty starting latent, with loaded images upstream of the
+    output only as guides (ControlNet, IP-Adapter, Redux). Anything else — the latent's origin
+    untraceable, or a loaded image used some other way, such as composited after sampling — abstains.
     """
     origin, samplers = _trace_latent_origin(graph, sampler_id)
     if origin == "image":
@@ -576,10 +613,14 @@ def _classify_source(graph, sink_id, sampler_id):
         return SOURCE_EDITED, f"`{graph[edit].get('class_type')}` conditions the generation on an input image"
     if origin is None:
         return None, "could not trace where the starting latent comes from"
-    consumer = _image_consumer(graph, sink_id)
+    upstream, guides = _upstream_past_guidance(graph, sink_id)
+    consumer = _image_consumer(graph, upstream)
     if consumer is not None:
         return None, (f"an input image feeds `{graph[consumer].get('class_type')}`, "
                       "which chandra does not classify")
+    if guides:
+        names = ", ".join(f"`{ct}`" for ct in sorted({graph[g].get("class_type") for g in guides}))
+        return SOURCE_CREATED, f"starts from an empty latent; input images only guide it, via {names}"
     return SOURCE_CREATED, "starts from an empty latent, with no input image"
 
 
