@@ -156,8 +156,14 @@ generations (background removers, pose detectors, …), and generations that use
 other way, such as compositing it in after sampling. `chandra show` prints the value it would write,
 or why it abstained.
 
-This is on by default; `--no-mark-ai` leaves it out (and `--no-xmp` skips it along with the rest of the
-XMP packet). It adds nothing the file didn't already reveal — the embedded workflow shows the image was
+Alongside it go two properties from IPTC Photo Metadata 2025.1, each written when the graph
+resolves it: **AI Prompt Information** (`Iptc4xmpExt:AIPromptInformation`) holds the prompts, labelled
+`Positive:` and `Negative:`, and **AI System Used** (`Iptc4xmpExt:AISystemUsed`) the checkpoint, named
+as the `parameters` chunk's `Model:` field names it. The other two AI properties of that release, *AI
+Prompt Writer Name* and *AI System Version Used*, are never written: no workflow records them.
+
+This is all on by default; `--no-mark-ai` leaves the whole group out (and `--no-xmp` skips it along with
+the rest of the XMP packet). It adds nothing the file didn't already reveal — the embedded workflow shows the image was
 generated — but makes that legible outside the SD ecosystem.
 
 The property is an unsigned signal, not proof: any XMP-aware tool can change it, and any tool that

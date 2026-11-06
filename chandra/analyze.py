@@ -29,7 +29,7 @@ except ImportError:  # resolver degrades gracefully without it
 __all__ = ["SOURCE_CREATED", "SOURCE_EDITED",
            "Lora", "Recipe", "analyze", "conditioning_roles", "describe_workflow",
            "format_steps", "format_recipe", "format_description", "format_workflow_description",
-           "format_source_type"]
+           "format_source_type", "format_prompt_information"]
 
 # IPTC Digital Source Type terms (vocabulary at http://cv.iptc.org/newscodes/digitalsourcetype/) —
 # the two a ComfyUI graph can prove.
@@ -774,3 +774,14 @@ def format_source_type(recipe: Recipe) -> str:
     if recipe.digital_source_type is None:
         return f"abstained ({recipe.digital_source_type_reason})"
     return f"{recipe.digital_source_type} ({recipe.digital_source_type_reason})"
+
+
+def format_prompt_information(recipe: Recipe) -> Optional[str]:
+    """The prompts as one labelled text, for IPTC *AI Prompt Information*; None if none resolved.
+
+    A "Positive:" block, then a "Negative:" block, each only when non-empty — the same labels as
+    `format_description`.
+    """
+    blocks = [f"{label}:\n{text}" for label, text in (("Positive", recipe.positive), ("Negative", recipe.negative))
+              if text]
+    return "\n\n".join(blocks) or None

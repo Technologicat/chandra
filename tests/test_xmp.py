@@ -60,6 +60,15 @@ def test_digital_source_type_is_the_full_uri_in_the_description():
     assert _dc_description(packet) == "x"
 
 
-def test_no_digital_source_type_means_no_property_and_no_namespace():
+def test_no_iptc_properties_means_no_iptc_namespace():
     packet = xmp.build("x")
-    assert "DigitalSourceType" not in packet and "Iptc4xmpExt" not in packet
+    assert "Iptc4xmpExt" not in packet
+
+
+def test_ai_prompt_and_system_are_escaped_text_properties():
+    prompt = "Positive:\na <cat> & a dog\n\nNegative:\nblurry"
+    packet = xmp.build("x", ai_prompt_information=prompt, ai_system_used="flux2-dev-Q4_K_M")
+    desc = _root(packet).find(".//rdf:Description", _NS)
+    assert desc.find("Iptc4xmpExt:AIPromptInformation", _NS).text == prompt   # newlines and markup survive
+    assert desc.find("Iptc4xmpExt:AISystemUsed", _NS).text == "flux2-dev-Q4_K_M"
+    assert desc.find("Iptc4xmpExt:DigitalSourceType", _NS) is None             # each property independent

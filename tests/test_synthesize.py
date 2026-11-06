@@ -173,8 +173,8 @@ def test_sample_synthesis_parses_back(png):
     assert sett["Model"]                                # a model name is present
     assert "Steps" in sett
     for lora in recipe.loras:                            # each LoRA shows up as a <lora:...> tag
-        from chandra.synthesize import _basename_no_ext
-        assert f"<lora:{_basename_no_ext(lora.name)}:" in pos
+        from chandra.synthesize import display_name
+        assert f"<lora:{display_name(lora.name)}:" in pos
 
 
 # --------------------------------------------------------------------------------

@@ -20,13 +20,14 @@ negative); fields we couldn't resolve are omitted, never guessed.
 from . import TOOL_TAG, __version__
 from .analyze import format_steps
 
-__all__ = ["synthesize"]
+__all__ = ["display_name", "synthesize"]
 
 # Extensions stripped from model/LoRA filenames for the displayed name (A1111 convention).
 _MODEL_EXTS = (".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin")
 
 
-def _basename_no_ext(name: str) -> str:
+def display_name(name: str) -> str:
+    """A model/LoRA file's name as A1111 shows it: the basename, with a model-file extension stripped."""
     base = name.replace("\\", "/").split("/")[-1]
     low = base.lower()
     for ext in _MODEL_EXTS:
@@ -75,7 +76,7 @@ def synthesize(recipe, version: str = None) -> str:
     # (appended to the last prompt line, not dangling on a new line after a trailing newline).
     positive = (recipe.positive or "").rstrip()
     lora_tags = "".join(
-        f" <lora:{_basename_no_ext(lora.name)}:{_num(lora.strength) if lora.strength is not None else '1'}>"
+        f" <lora:{display_name(lora.name)}:{_num(lora.strength) if lora.strength is not None else '1'}>"
         for lora in recipe.loras if lora.name
     )
     parts = [(positive + lora_tags).strip()]
@@ -100,26 +101,26 @@ def synthesize(recipe, version: str = None) -> str:
     if recipe.model:
         if recipe.model_hash:  # AutoV2 — lets CivitAI link the checkpoint to its page
             settings.append(f"Model hash: {recipe.model_hash}")
-        settings.append(f"Model: {_basename_no_ext(recipe.model)}")
+        settings.append(f"Model: {display_name(recipe.model)}")
     # VAE: its own A1111-standard pair (the slot SD Prompt Reader and humans read). Name always; hash
     # only with --hash — mirroring Model hash:/Model:. CivitAI doesn't auto-link VAEs from the hash as
     # it does checkpoints/LoRAs (tested), but the hash stays for file identity and consistency.
     if recipe.vae:
         if recipe.vae_hash:
             settings.append(f"VAE hash: {recipe.vae_hash}")
-        settings.append(f"VAE: {_basename_no_ext(recipe.vae)}")
+        settings.append(f"VAE: {display_name(recipe.vae)}")
     # Text encoders → Forge's `Module N` (1-indexed, basename without extension). Modern models load
     # the text encoder from its own file — often an LLM — which a plain `Model:` field has no slot for;
     # there's no standard hash field for these, so they go name-only (the VAE has its own pair above).
     for i, name in enumerate(recipe.text_encoders):
-        settings.append(f"Module {i + 1}: {_basename_no_ext(name)}")
+        settings.append(f"Module {i + 1}: {display_name(name)}")
     # Denoising strength: emit only when it actually reduced denoise (Forge omits it at 1.0 / txt2img).
     if recipe.denoise is not None and float(recipe.denoise) != 1.0:
         settings.append(f"Denoising strength: {_num(recipe.denoise)}")
     # Lora hashes: A1111's quoted form. The value carries commas/colons, so it goes late (after the
     # fields SDPR displays); SDPR's simple parser mangles it into ignored keys, while CivitAI's
     # quote-aware parser reads it and links each LoRA.
-    hashed = [(_basename_no_ext(lora.name), lora.hash) for lora in recipe.loras if lora.name and lora.hash]
+    hashed = [(display_name(lora.name), lora.hash) for lora in recipe.loras if lora.name and lora.hash]
     if hashed:
         settings.append('Lora hashes: "' + ", ".join(f"{name}: {h}" for name, h in hashed) + '"')
     settings.append(f"Version: {TOOL_TAG} {version}")

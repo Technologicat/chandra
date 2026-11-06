@@ -7,8 +7,8 @@ an AUTOMATIC1111 / SD-Forge `parameters` string so that services which don't ana
 Three verbs, a deliberate read/write split (writing is never the default):
 
 - `chandra show`   — analyze and print (read-only); `--recipe` dumps the structured recipe instead.
-- `chandra inject` — write the synthesized `parameters` chunk (and an XMP description, with the IPTC
-  Digital Source Type marking it AI-generated) into the PNG.
+- `chandra inject` — write the synthesized `parameters` chunk (and an XMP description, with IPTC
+  AI-provenance properties) into the PNG.
 - `chandra eject`  — remove that metadata again, restoring the image to its pre-inject state.
 
 The module keeps the name `rosetta` (it re-expresses one recipe in a script other tools read — see
@@ -71,7 +71,8 @@ def add_subparser(subparsers):
         description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place. "
                     "Also embeds the recipe as an XMP description, so general image viewers (Pix, etc.) "
                     "show it too, and marks the image as AI-generated or AI-edited with the IPTC Digital "
-                    "Source Type, where the graph proves which. A `parameters` chunk or XMP packet written by another tool is left in "
+                    "Source Type, where the graph proves which, along with the IPTC AI prompt and AI "
+                    "system. A `parameters` chunk or XMP packet written by another tool is left in "
                     "place unless `--force` is given.")
     _add_paths_arg(inject)
     _add_hash_args(inject)
@@ -79,8 +80,8 @@ def add_subparser(subparsers):
                         help="skip the XMP description for general viewers (write only the SD-tool "
                              "`parameters` chunk)")
     inject.add_argument("--no-mark-ai", action="store_true",
-                        help="leave the IPTC Digital Source Type (\"created/edited using generative AI\") "
-                             "out of the XMP packet")
+                        help="leave the IPTC AI-provenance properties (Digital Source Type, AI Prompt "
+                             "Information, AI System Used) out of the XMP packet")
     inject.add_argument("--force", action="store_true",
                         help="overwrite a `parameters` chunk or XMP packet even if chandra didn't write it")
     inject.set_defaults(func=run_inject, parser=inject)
@@ -142,6 +143,20 @@ def _ours_xmp(packet: str) -> bool:
     return f'x:xmptk="{TOOL_TAG}' in packet
 
 
+def _ai_provenance(recipe):
+    """The IPTC AI-provenance properties the recipe resolves, as `xmp.build` keyword arguments.
+
+    A value the graph doesn't resolve is None, and `xmp.build` leaves it out. *AI System Used* is the
+    checkpoint as the `parameters` chunk's `Model:` field names it. *AI Prompt Writer Name* and *AI
+    System Version Used* are never written: no graph records either.
+    """
+    return {
+        "digital_source_type": recipe.digital_source_type,
+        "ai_prompt_information": _analyze.format_prompt_information(recipe),
+        "ai_system_used": _synthesize.display_name(recipe.model) if recipe.model else None,
+    }
+
+
 def _may_write(path, existing, ours, label, force) -> bool:
     """May `inject` write a layer whose current content is `existing` (None if absent)?
 
@@ -190,8 +205,8 @@ def _process(args, write: bool) -> int:
                 written.append("parameters")
             if not getattr(args, "no_xmp", False) and \
                     _may_write(path, fields.get(pngchunks.XMP_KEYWORD), _ours_xmp, "XMP", force):
-                source_type = None if getattr(args, "no_mark_ai", False) else recipe.digital_source_type
-                packet = _xmp.build(_analyze.format_description(recipe), digital_source_type=source_type)
+                packet = _xmp.build(_analyze.format_description(recipe),
+                                    **({} if getattr(args, "no_mark_ai", False) else _ai_provenance(recipe)))
                 out_chunks = pngchunks.set_xmp(out_chunks, packet)
                 written.append("XMP description")
             if not written:
@@ -211,6 +226,11 @@ def _process(args, write: bool) -> int:
             else:
                 print(params)
                 print(f"DigitalSourceType: {_analyze.format_source_type(recipe)}")
+                system = _ai_provenance(recipe)["ai_system_used"]
+                if system is None:
+                    why = "not a generation" if recipe.sampler_class is None else "model unresolved"
+                    system = f"abstained ({why})"
+                print(f"AISystemUsed: {system}")
             print()
     if ctx is not None:
         ctx[1].save()

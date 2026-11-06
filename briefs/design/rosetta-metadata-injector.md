@@ -491,7 +491,8 @@ clean file.
 
 The same `rdf:Description` also carries the **IPTC Digital Source Type**
 (`Iptc4xmpExt:DigitalSourceType`, marking the image as created or edited with generative AI) when the
-graph proves which; `--no-mark-ai` opts out. The classification, its abstain cases, and the rationale
+graph proves which, plus the IPTC 2025.1 `AIPromptInformation` and `AISystemUsed`; `--no-mark-ai` opts
+out of all three. The classification, its abstain cases, and the rationale
 for the default are in `briefs/done/digital-source-type.md`; the code is `analyze._classify_source`.
 
 The description text is a **clean rendering of the full recipe** (`analyze.format_description`):

@@ -478,3 +478,13 @@ def test_format_recipe_reports_source_type():
     assert "source:   trainedAlgorithmicMedia (" in analyze.format_recipe(r)
     r = analyze.analyze({})
     assert "source:   abstained (" in analyze.format_recipe(r)
+
+
+def test_format_prompt_information_labels_both_prompts():
+    r = analyze.analyze(_txt2img_graph())
+    assert analyze.format_prompt_information(r) == "Positive:\na cat\n\nNegative:\nblurry"
+
+
+def test_format_prompt_information_omits_empty_blocks():
+    assert analyze.format_prompt_information(Recipe(positive="a cat", negative="")) == "Positive:\na cat"
+    assert analyze.format_prompt_information(Recipe()) is None

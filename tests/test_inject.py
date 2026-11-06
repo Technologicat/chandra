@@ -102,13 +102,18 @@ def _xmp(path):
 
 def test_inject_marks_ai_by_default(clean):
     assert cli.main(["inject", str(clean)]) == 0
-    assert f">{_DST_URI}trainedAlgorithmicMedia<" in _xmp(clean)
+    packet = _xmp(clean)
+    assert f">{_DST_URI}trainedAlgorithmicMedia<" in packet
+    assert ("<Iptc4xmpExt:AIPromptInformation>Positive:\nscrubbed positive prompt\n\n"
+            "Negative:\nscrubbed negative prompt</Iptc4xmpExt:AIPromptInformation>") in packet
+    assert "<Iptc4xmpExt:AISystemUsed>scrubbed-checkpoint</Iptc4xmpExt:AISystemUsed>" in packet
+    assert "AIPromptWriterName" not in packet and "AISystemVersionUsed" not in packet  # never in a graph
 
 
-def test_inject_no_mark_ai_leaves_the_property_out(clean):
+def test_inject_no_mark_ai_leaves_the_properties_out(clean):
     assert cli.main(["inject", "--no-mark-ai", str(clean)]) == 0
     packet = _xmp(clean)
-    assert "dc:description" in packet and "DigitalSourceType" not in packet
+    assert "dc:description" in packet and "Iptc4xmpExt" not in packet
 
 
 def test_inject_no_xmp_skips_the_mark_too(clean):
@@ -121,7 +126,7 @@ def test_inject_abstains_on_non_generation(tmp_path):
     shutil.copy(FIXTURES_DIR / "tools-rembg.png", png)
     assert cli.main(["inject", str(png)]) == 0
     packet = _xmp(png)
-    assert "dc:description" in packet and "DigitalSourceType" not in packet
+    assert "dc:description" in packet and "Iptc4xmpExt" not in packet     # no source type, prompt or model
 
 
 @pytest.mark.parametrize("flags", [[], ["--no-mark-ai"]], ids=["marked", "unmarked"])
@@ -153,12 +158,24 @@ def test_show_reports_the_source_type(capsys):
     assert cli.main(["show", str(FIXTURES_DIR / "flux2-img2img.png")]) == 0
     assert "DigitalSourceType: compositeWithTrainedAlgorithmicMedia (" in capsys.readouterr().out
     assert cli.main(["show", str(FIXTURES_DIR / "tools-rembg.png")]) == 0
-    assert "DigitalSourceType: abstained (" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "DigitalSourceType: abstained (" in out
+    assert "AISystemUsed: abstained (not a generation)" in out
+
+
+def test_show_reports_the_ai_system(capsys):
+    assert cli.main(["show", str(FIXTURES_DIR / "flux2-img2img.png")]) == 0
+    assert "AISystemUsed: scrubbed-checkpoint\n" in capsys.readouterr().out
 
 
 @pytest.mark.skipif(shutil.which("exiftool") is None, reason="exiftool not installed")
-def test_exiftool_reads_the_digital_source_type(clean):
+def test_exiftool_reads_the_iptc_properties(clean):
     assert cli.main(["inject", str(clean)]) == 0
-    out = subprocess.run(["exiftool", "-s3", "-XMP-iptcExt:DigitalSourceType", str(clean)],
-                         capture_output=True, text=True, check=True).stdout.strip()
-    assert out == f"{_DST_URI}trainedAlgorithmicMedia"
+
+    def read(tag):
+        return subprocess.run(["exiftool", "-s3", f"-XMP-iptcExt:{tag}", str(clean)],
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+    assert read("DigitalSourceType") == f"{_DST_URI}trainedAlgorithmicMedia"
+    assert read("AISystemUsed") == "scrubbed-checkpoint"
+    assert read("AIPromptInformation").startswith("Positive:")

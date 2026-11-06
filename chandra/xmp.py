@@ -11,9 +11,10 @@ a PNG; `pngchunks.set_xmp` handles the chunk side. Viewers resolve their "Descri
 tagset headed by `Iptc.Application2.Caption`, then `Xmp.dc.description`; with no IPTC block present,
 our `dc:description` is the value they surface.
 
-The same `rdf:Description` can also carry `Iptc4xmpExt:DigitalSourceType`, the IPTC property marking
-an image as created or edited with generative AI — the field platforms look for, rather than reading
-any SD-specific metadata.
+The same `rdf:Description` can also carry IPTC Extension properties for AI provenance:
+`DigitalSourceType`, marking an image as created or edited with generative AI — the field platforms
+look for, rather than reading any SD-specific metadata — and, from IPTC Photo Metadata 2025.1,
+`AIPromptInformation` and `AISystemUsed`.
 """
 
 from xml.sax.saxutils import escape
@@ -35,12 +36,18 @@ _XPACKET_BEGIN = '<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>'
 _XPACKET_END = '<?xpacket end="w"?>'
 
 
-def build(description: str, version: str = None, *, digital_source_type: str = None) -> str:
+def build(description: str, version: str = None, *, digital_source_type: str = None,
+          ai_prompt_information: str = None, ai_system_used: str = None) -> str:
     """Return an XMP packet (a UTF-8 XML string) carrying `description` as `dc:description`.
 
-    If `digital_source_type` is given — a term from the IPTC Digital Source Type vocabulary, such as
-    `trainedAlgorithmicMedia` — the packet also carries `Iptc4xmpExt:DigitalSourceType`, whose value
-    is the term's full URI.
+    Each IPTC Extension property below is written only when its argument is given:
+
+    - `digital_source_type`: a term from the IPTC Digital Source Type vocabulary, such as
+      `trainedAlgorithmicMedia`; written as `Iptc4xmpExt:DigitalSourceType`, whose value is the
+      term's full URI.
+    - `ai_prompt_information`: the text given to the generative model as its prompt(s), written as
+      `Iptc4xmpExt:AIPromptInformation`.
+    - `ai_system_used`: the AI engine and/or model name, written as `Iptc4xmpExt:AISystemUsed`.
 
     `dc:description` is a language alternative, so the text is wrapped in an `rdf:Alt` / `rdf:li`
     with `xml:lang="x-default"` — the shape exiv2 and other readers expect for a localizable text
@@ -54,12 +61,16 @@ def build(description: str, version: str = None, *, digital_source_type: str = N
         version = __version__
     text = escape(description)
     toolkit = escape(f"{TOOL_TAG} {version}", {'"': "&quot;"})  # attribute value: also escape the quote
-    if digital_source_type is None:
-        iptc_ns = source_type = ""
-    else:
-        iptc_ns = f' xmlns:Iptc4xmpExt="{_IPTC_EXT_NS}"'
-        uri = escape(DIGITAL_SOURCE_TYPE_BASE + digital_source_type)
-        source_type = f"   <Iptc4xmpExt:DigitalSourceType>{uri}</Iptc4xmpExt:DigitalSourceType>\n"
+    iptc = [(name, value) for name, value in (
+        ("DigitalSourceType",
+         DIGITAL_SOURCE_TYPE_BASE + digital_source_type if digital_source_type is not None else None),
+        ("AIPromptInformation", ai_prompt_information),
+        ("AISystemUsed", ai_system_used),
+    ) if value is not None]
+    iptc_ns = f' xmlns:Iptc4xmpExt="{_IPTC_EXT_NS}"' if iptc else ""
+    # Simple Text properties, so element content; escaping `& < >` suffices, as for the description.
+    iptc_props = "".join(f"   <Iptc4xmpExt:{name}>{escape(value)}</Iptc4xmpExt:{name}>\n"
+                         for name, value in iptc)
     return (
         f"{_XPACKET_BEGIN}\n"
         f'<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="{toolkit}">\n'
@@ -70,7 +81,7 @@ def build(description: str, version: str = None, *, digital_source_type: str = N
         f'     <rdf:li xml:lang="x-default">{text}</rdf:li>\n'
         "    </rdf:Alt>\n"
         "   </dc:description>\n"
-        f"{source_type}"
+        f"{iptc_props}"
         "  </rdf:Description>\n"
         " </rdf:RDF>\n"
         "</x:xmpmeta>\n"

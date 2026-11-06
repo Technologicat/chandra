@@ -74,4 +74,9 @@ Add a short README subsection under "Injecting metadata", "Marking images as AI-
 - **Image guidance counts as created** (decided 2026-11-06): the guide image doesn't become part of the output, which is a regular generated image. Initially built to abstain, on the grounds that a tile ControlNet re-rendering a photo is closer to an edit; that case is accepted as "created".
 - **Known gap:** an image source whose class name doesn't contain both "load" and "image", feeding only the conditioning, would read as "created". On the latent path the same node ends the trail without a `batch_size`, so that case abstains.
 - **External readers:** exiftool isn't installed on the dev machine, so the exiftool test skips there; it runs wherever exiftool is present.
-- **Not built:** the IPTC 2025.1 AI fields (*AI Prompt Information*, *AI System Used*, …). The brief left them to evaluate as a second step, after verifying property names against the published spec.
+- **IPTC 2025.1 AI fields**, built as the second step the same day. Verified against the published spec (IPTC Photo Metadata Standard 2025.1 rev 1, 2025-11-26): all four are simple `Text`, cardinality 0..1, in the `Iptc4xmpExt` namespace above, with no IIM equivalent.
+  - `Iptc4xmpExt:AIPromptInformation`: the prompts as labelled blocks, `Positive:` then `Negative:`, each only when non-empty (the spec's user note allows both). Decided 2026-11-06, over the A1111 `Negative prompt:` form, for readability without SD knowledge.
+  - `Iptc4xmpExt:AISystemUsed`: the checkpoint name as the `parameters` chunk's `Model:` field shows it (`synthesize.display_name`). Decided 2026-11-06, over "ComfyUI" or "ComfyUI, <model>".
+  - `Iptc4xmpExt:AIPromptWriterName`: never written; no graph records it. A user-supplied `--prompt-writer` was declined (2026-11-06), which keeps chandra from writing personal names into files.
+  - `Iptc4xmpExt:AISystemVersionUsed`: never written; no graph records a version of anything.
+  - All under the same `--no-mark-ai`. Written independently of the source type: a generation whose source type abstains still has a prompt and a model.
