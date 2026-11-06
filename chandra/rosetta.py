@@ -69,12 +69,15 @@ def add_subparser(subparsers):
         "inject", help="write A1111/CivitAI metadata into the PNG(s)",
         description="Analyze a ComfyUI PNG and write the A1111/CivitAI `parameters` chunk into it, in place. "
                     "Also embeds the recipe as an XMP description, so general image viewers (Pix, etc.) "
-                    "show it too.")
+                    "show it too. A `parameters` chunk or XMP packet written by another tool is left in "
+                    "place unless `--force` is given.")
     _add_paths_arg(inject)
     _add_hash_args(inject)
     inject.add_argument("--no-xmp", action="store_true",
                         help="skip the XMP description for general viewers (write only the SD-tool "
                              "`parameters` chunk)")
+    inject.add_argument("--force", action="store_true",
+                        help="overwrite a `parameters` chunk or XMP packet even if chandra didn't write it")
     inject.set_defaults(func=run_inject, parser=inject)
 
     eject = subparsers.add_parser(
@@ -124,6 +127,28 @@ def _hashing_context(args):
     return (_hashing.ResourceResolver(dirs), _hashing.HashCache())
 
 
+def _ours_parameters(text: str) -> bool:
+    """True if a `parameters` chunk was written by chandra (carries its `Version:` stamp)."""
+    return f"Version: {TOOL_TAG}" in text
+
+
+def _ours_xmp(packet: str) -> bool:
+    """True if an XMP packet was written by chandra (carries its `x:xmptk` toolkit stamp)."""
+    return f'x:xmptk="{TOOL_TAG}' in packet
+
+
+def _may_write(path, existing, ours, label, force) -> bool:
+    """May `inject` write a layer whose current content is `existing` (None if absent)?
+
+    Yes over nothing, over chandra's own output (as recognized by the predicate `ours`), or under
+    `force`. Otherwise warn that the foreign layer is left in place, and say no.
+    """
+    if existing is None or force or ours(existing):
+        return True
+    print(f"{path}: leaving non-chandra {label} in place (use --force to overwrite it)", file=sys.stderr)
+    return False
+
+
 def _process(args, write: bool) -> int:
     """Shared read → analyze → (hash) → synthesize loop for `show` (write=False) and `inject`."""
     # Neither verb defaults to recursing the cwd: a bare `chandra show`/`inject` prints usage rather
@@ -151,16 +176,27 @@ def _process(args, write: bool) -> int:
         if write:
             # Two coexisting layers: the `parameters` chunk for the SD tools, and (unless --no-xmp)
             # an XMP `dc:description` carrying the human-readable recipe for general image viewers.
-            out_chunks = pngchunks.set_text_field(chunks, "parameters", params)
-            if not getattr(args, "no_xmp", False):
+            # Each is written only over nothing, over chandra's own, or under --force.
+            fields = pngchunks.text_fields(chunks)
+            force = getattr(args, "force", False)
+            out_chunks, written = chunks, []
+            if _may_write(path, fields.get("parameters"), _ours_parameters, "`parameters`", force):
+                out_chunks = pngchunks.set_text_field(out_chunks, "parameters", params)
+                written.append("parameters")
+            if not getattr(args, "no_xmp", False) and \
+                    _may_write(path, fields.get(pngchunks.XMP_KEYWORD), _ours_xmp, "XMP", force):
                 out_chunks = pngchunks.set_xmp(out_chunks, _xmp.build(_analyze.format_description(recipe)))
+                written.append("XMP description")
+            if not written:
+                print(f"{path}: nothing injected")
+                continue
             try:
                 pngchunks.write_file(path, out_chunks)
             except Exception as e:
                 print(f"{path}: ERROR writing: {e}", file=sys.stderr)
                 status = 1
                 continue
-            print(f"injected → {path}")
+            print(f"injected ({', '.join(written)}) → {path}")
         else:
             print(f"=== {path} ===")
             print(_analyze.format_recipe(recipe) if args.recipe else params)
@@ -178,16 +214,6 @@ def run_show(args) -> int:
 def run_inject(args) -> int:
     """`chandra inject`: read → analyze → synthesize → write the parameters chunk in place."""
     return _process(args, write=True)
-
-
-def _ours_parameters(text: str) -> bool:
-    """True if a `parameters` chunk was written by chandra (carries its `Version:` stamp)."""
-    return f"Version: {TOOL_TAG}" in text
-
-
-def _ours_xmp(packet: str) -> bool:
-    """True if an XMP packet was written by chandra (carries its `x:xmptk` toolkit stamp)."""
-    return f'x:xmptk="{TOOL_TAG}' in packet
 
 
 def run_eject(args) -> int:

@@ -79,6 +79,11 @@ machine-readable A1111/SD-Forge `parameters` chunk (what CivitAI and SD Prompt R
 XMP `dc:description` (what general image viewers show). The two sections below cover what each layer
 is for — auto-linking your resources on CivitAI, and seeing the recipe in an everyday image viewer.
 
+A layer some other tool already wrote — a `parameters` block from A1111/Forge, an XMP packet from a
+photo manager — is left in place, with a warning, and only the other layer is written. `--force`
+overwrites it anyway. (chandra recognizes its own layers by the same stamp `eject` uses, so
+re-injecting an image chandra already injected simply replaces them.)
+
 ### Auto-linking resources on CivitAI (`--hash`)
 
 By default the checkpoint and LoRAs are named as plain text — readable by a human and by SD Prompt

@@ -15,6 +15,10 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 ### Changed
 
 - `chardet` is no longer installed as a dependency; chandra never used it.
+- **`chandra inject` now leaves metadata written by another tool in place.**
+  - Up to v0.3.0, `inject` overwrote any existing `parameters` chunk, and replaced any existing XMP packet wholesale — destroying whatever another tool had put there (captions, rights information).
+  - Each layer is now checked separately for chandra's stamp, like `eject` already did; a foreign one is skipped with a warning, and the other layer is still written.
+  - `--force` overwrites them anyway.
 
 ---
 
