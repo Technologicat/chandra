@@ -1,7 +1,7 @@
 """Structural integration tests over the committed, anonymized fixtures (`tests/fixtures/`).
 
 These fixtures are `chandra scrub` skeletons of real ComfyUI workflows — graph wiring intact, image
-and prompt prose removed (see `briefs/palimpsest-scrub.md`). Unlike the `00_stuff/` content tests
+and prompt prose removed (see `briefs/design/palimpsest-scrub.md`). Unlike the `00_stuff/` content tests
 (which assert exact prompt text and only run where that gitignored scratch dir is present), these are
 committed, so they run everywhere — giving CI coverage of the parser against real graph *structures*.
 

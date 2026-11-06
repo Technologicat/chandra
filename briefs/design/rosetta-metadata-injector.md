@@ -1,7 +1,7 @@
 # Brief: ComfyUI → CivitAI/A1111 metadata injector
 
 *The tool is named `rosetta` (analyzer/injector); its companion prompt-search tool is `concordance`
-(its own brief: `briefs/concordance-search.md`). This document is the design brief; it precedes
+(its own brief: `briefs/design/concordance-search.md`). This document is the design brief; it precedes
 implementation.*
 
 ## Problem
@@ -514,10 +514,10 @@ naming lore in the README.)
 
 - **`rosetta`** (engine for `show` / `inject` / `eject`) — the analyzer/injector (this brief's subject).
 - **`concordance`** (engine for `search`) — the prompt-search tool: a directory argument and
-  fragment/exact search modes. See `briefs/concordance-search.md`.
+  fragment/exact search modes. See `briefs/design/concordance-search.md`.
 - **`palimpsest`** (engine for `scrub`) — reduces a ComfyUI PNG to an anonymized structural skeleton,
   for privacy-safe bug reports and as the source of the committed test fixtures. See
-  `briefs/palimpsest-scrub.md`.
+  `briefs/design/palimpsest-scrub.md`.
 
 **Tab completion via `argcomplete`.** The `chandra` entry script carries `# PYTHON_ARGCOMPLETE_OK` and
 calls `argcomplete.autocomplete(parser)` before `parse_args()`. Completion derives from the live
@@ -544,7 +544,7 @@ distribution ships both tools and the README. Lint/style/CI per the fleet conven
 The CLI surface is three descriptive verbs: **`chandra search`**, **`chandra show`**, **`chandra inject`**
 (descriptive beats evocative for subcommands). The layered names live on as the *engine* modules:
 **`rosetta`** (behind `show`/`inject`) and **`concordance`** (behind `search`, its own brief:
-`briefs/concordance-search.md`). The full human-facing rationale — the Rosetta Stone, the deadpan
+`briefs/design/concordance-search.md`). The full human-facing rationale — the Rosetta Stone, the deadpan
 "no relation to Apple's Rosetta", and what a concordance is — lives in the project `README.md`,
 where a reader will look for it. In short: `rosetta` makes a workflow legible to outside tools (one
 message, many scripts); `concordance` indexes and searches the text inscribed across a corpus of

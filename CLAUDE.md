@@ -25,11 +25,15 @@ graphs those tools mostly punt on.
 `cli.py` is the dispatcher; `inputs.py` is the shared path/stdin iterator. The module keeps the engine
 names (`rosetta`/`concordance`/`palimpsest`); the CLI surface is the plain verbs.
 
-**The briefs are the design source of truth.** Each engine has a design brief in `briefs/`
+**The briefs are the design source of truth.** Each engine has a design brief in `briefs/design/`
 (`rosetta-metadata-injector.md`, `concordance-search.md`, `palimpsest-scrub.md`) carrying the rationale,
 the observed ComfyUI-graph patterns, the format contracts (e.g. SD Prompt Reader's A1111 parser rules),
 and the verification plan. Read the relevant brief before changing engine behavior, and update it when
 the behavior changes.
+
+Task briefs — a single piece of work, as opposed to an architecture description — sit at the top level of
+`briefs/` while the work is open, and move to `briefs/done/` once it has been built. The design briefs in
+`briefs/design/` are kept current instead.
 
 ## Core principle: honest reporting
 

@@ -265,4 +265,4 @@ Two things up front: you can run `chandra scrub your.png` to produce an anonymiz
 of the original; and please keep any example images **SFW** (character art is fine), since
 the issue tracker is public.
 
-If you are interested in the technical design, architectural briefs live under [`briefs/`](briefs/).
+If you are interested in the technical design, architectural briefs live under [`briefs/design/`](briefs/design/).

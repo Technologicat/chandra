@@ -2,7 +2,7 @@
 
 This is the heart of `rosetta`. Both CivitAI and SD Prompt Reader punt on non-trivial ComfyUI
 graphs; we walk the graph ourselves and reduce it to the generation recipe, which synthesis then
-renders as an A1111 `parameters` string. See `briefs/rosetta-metadata-injector.md`.
+renders as an A1111 `parameters` string. See `briefs/design/rosetta-metadata-injector.md`.
 
 The walk is **role-based**, never keyed on node id or exact class name (those vary across node packs
 and templates): we recognize a node by the shape of its inputs. We traverse the API-format `prompt`

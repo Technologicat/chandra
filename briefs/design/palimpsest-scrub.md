@@ -1,6 +1,6 @@
 # Brief: `palimpsest` — scrub a ComfyUI PNG to an anonymized skeleton
 
-*Companion to `rosetta` (see `briefs/rosetta-metadata-injector.md`). `palimpsest` is the engine
+*Companion to `rosetta` (see `briefs/design/rosetta-metadata-injector.md`). `palimpsest` is the engine
 module name; the CLI verb is **`chandra scrub`** (descriptive verbs on the surface, layered names in
 the source — see the README).*
 

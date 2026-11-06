@@ -2,7 +2,7 @@
 
 Walks the ComfyUI `prompt` graph embedded in a PNG, reconstructs the generation recipe, and renders
 an AUTOMATIC1111 / SD-Forge `parameters` string so that services which don't analyze ComfyUI graphs
-(CivitAI, SD Prompt Reader) recognize the image. See `briefs/rosetta-metadata-injector.md`.
+(CivitAI, SD Prompt Reader) recognize the image. See `briefs/design/rosetta-metadata-injector.md`.
 
 Three verbs, a deliberate read/write split (writing is never the default):
 

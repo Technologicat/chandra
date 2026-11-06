@@ -1,6 +1,6 @@
 # Brief: `concordance` — prompt search across image corpora
 
-*Companion to `rosetta` (see `briefs/rosetta-metadata-injector.md`). `concordance` is the engine
+*Companion to `rosetta` (see `briefs/design/rosetta-metadata-injector.md`). `concordance` is the engine
 module name; the CLI verb is **`chandra search`** (descriptive verbs on the surface, layered names in
 the source — see the README).*
 

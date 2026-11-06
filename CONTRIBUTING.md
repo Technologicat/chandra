@@ -38,7 +38,7 @@ so any SFW image through the same workflow reproduces the bug just as well.
 
 ## Pull requests
 
-For code changes, see [`briefs/`](briefs/) for the design rationale behind each engine, and run the
+For code changes, see [`briefs/design/`](briefs/design/) for the design rationale behind each engine, and run the
 test suite before submitting:
 
 ```bash

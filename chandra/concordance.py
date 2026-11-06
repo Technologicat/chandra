@@ -1,7 +1,7 @@
 """concordance — the engine behind `chandra search`.
 
 A concordance of a corpus of pictures: find which generated images match given search fragments in
-their embedded SD prompts. See `briefs/concordance-search.md`.
+their embedded SD prompts. See `briefs/design/concordance-search.md`.
 
 The module keeps the name `concordance` (an indexed listing of where words occur — see the README);
 the CLI surface is the descriptive verb `chandra search`.

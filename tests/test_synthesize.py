@@ -4,7 +4,7 @@
 Reader (`format/a1111.py`) and CivitAI both consume. It's the always-run acceptance gate: if our
 output parses under those rules, those tools read it. `test_real_sdpr_reads_injected` additionally
 checks the *actual* SD Prompt Reader parser when importable (it self-skips otherwise — see the
-verification recipe in `briefs/rosetta-metadata-injector.md`). Integration tests over `00_stuff/`
+verification recipe in `briefs/design/rosetta-metadata-injector.md`). Integration tests over `00_stuff/`
 skip when absent.
 """
 

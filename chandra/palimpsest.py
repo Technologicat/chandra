@@ -6,7 +6,7 @@ original text and written over — and that's exactly the transform here: we rem
 the rendered image, and any note nodes, but the structure still shows faintly through. The
 strongest identifier in a shared image is the *prompt text* (prose style is a stylometric
 fingerprint), so removing it is the main win; what remains is only the weak, structural trace of how
-someone wires a graph. See `briefs/rosetta-metadata-injector.md`.
+someone wires a graph. See `briefs/design/rosetta-metadata-injector.md`.
 
 Two uses, one transform:
 
