@@ -6,6 +6,12 @@ This project adheres to [semantic versioning](https://semver.org/). Dates are IS
 
 ---
 
+## 0.4.1 (in progress)
+
+*No user-visible changes yet.*
+
+---
+
 ## 0.4.0 — Spectral lines — 2026-11-06
 
 ### Added
